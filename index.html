@@ -1,1 +1,461 @@
-1
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<title>RIVER — Poker & Clubs</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0b0e11}
+body{display:grid;place-items:center;background:radial-gradient(ellipse at 50% 30%,#222a2b,#080a0d 75%);font-family:Arial,"Microsoft JhengHei",sans-serif}
+#stage{position:relative;box-shadow:0 12px 90px #0009}canvas{display:block;width:100%;height:100%;touch-action:none;outline:none}
+.a11y{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#entry{position:absolute;display:none;margin:0;outline:0;border:1px solid #52614d;border-radius:9px;background:#11151a;color:#f3f6ed;padding:0 14px;font:500 18px Arial,"Microsoft JhengHei",sans-serif;box-shadow:0 0 0 2px #d7ef6420}
+#entry:focus{border-color:#d5ed63}#entry::placeholder{color:#727d84}
+</style>
+</head><body>
+<main id="stage" aria-label="RIVER Poker and Clubs">
+<canvas id="game" tabindex="0" aria-label="撲克大廳，Tab 選擇控制項，Enter 開啟，Escape 返回"></canvas>
+<input id="entry" autocomplete="off" spellcheck="false" maxlength="24" aria-label="輸入資料">
+<div id="controls" class="a11y" aria-label="大廳操作"></div>
+<div id="announce" class="a11y" role="status" aria-live="polite"></div>
+</main>
+<script>
+(()=>{
+'use strict';
+/*
+ RIVER · independent poker lobby client, design reference: public game discovery
+ (Natural8) and private club flows (ClubGG). Original branding and graphics.
+ Single file; no SVG, external images, fonts, network requests or build step.
+ Canvas components: drawing primitives / cards / controls / views / modal forms.
+ Public rooms, seeded clubs and tournaments are demo data. Created clubs and rooms,
+ favorites, reward history and preferences persist in this browser only.
+ EDIT: MODES, DIRECTORY, PUBLIC_ROOMS, EVENTS and THEME are the content sources.
+*/
+const W=720,H=1280,TAU=Math.PI*2;
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d',{alpha:false});
+const stage=document.getElementById('stage'),entry=document.getElementById('entry'),controls=document.getElementById('controls'),announce=document.getElementById('announce');
+const P={bg:'#111418',panel:'#1b2026',gold:'#d4eb67',light:'#f1f4ee',text:'#d2d8db',muted:'#87929b',line:'#30383e',teal:'#71cabc'};
+const MODES=[{id:'NLH',name:"HOLD’EM",zh:'德州撲克',color:'#d4eb67',suit:'spade'},
+{id:'PLO',name:'OMAHA',zh:'奧馬哈',color:'#89bce9',suit:'diamond'},
+{id:'6+',name:'SHORT DECK',zh:'短牌撲克',color:'#c8ace8',suit:'heart'}];
+const DIRECTORY=[
+{id:'100001',name:'River Social',tag:'一起打牌，一起進步。',members:128,color:'#76cbb9',mark:'R',owner:false},
+{id:'200002',name:'Midnight Aces',tag:'給熱愛深籌碼的夜貓子。',members:64,color:'#a5b4f0',mark:'M',owner:false},
+{id:'300003',name:'Deep Stack Lab',tag:'歡迎加入練習與討論。',members:86,color:'#e0b777',mark:'D',owner:false}
+];
+const PUBLIC_ROOMS=Array.from({length:24},(_,i)=>({id:'P'+(1001+i),club:null,mode:i%3,
+ name:['Open Table','River Room','Deep Stack','Evening Session'][i%4]+' '+(i+1),
+ blind:[1,2,5,10,25,50,100,5][i%8],seats:6,seated:[2,4,6,3,5,1][i%6]}));
+const CLUB_ROOMS=DIRECTORY.flatMap((c,ci)=>Array.from({length:6},(_,i)=>({id:c.id+'-'+i,club:c.id,mode:i%3,
+ name:['Social Table','Evening Game','Deep Stack'][i%3]+' '+(i+1),blind:[1,2,5,10,25,50][i],seats:6,seated:[3,4,2,6,5,1][(i+ci)%6]})));
+const EVENTS=[
+{id:'sunday',name:'SUNDAY SHOWDOWN',zh:'週日主賽',time:'週日 20:00',type:'NLH',fee:200,structure:'15 分鐘盲注',accent:'#d4eb67'},
+{id:'daily',name:'DAILY DEEP STACK',zh:'每日深籌碼',time:'每日 19:30',type:'NLH',fee:100,structure:'12 分鐘盲注',accent:'#71cabc'},
+{id:'omaha',name:'OMAHA NIGHT',zh:'奧馬哈之夜',time:'週五 21:00',type:'PLO',fee:300,structure:'10 分鐘盲注',accent:'#89bce9'},
+{id:'turbo',name:'SHORT DECK TURBO',zh:'短牌快速賽',time:'週六 22:00',type:'6+',fee:150,structure:'6 分鐘盲注',accent:'#c8ace8'}
+];
+const KEY='river-poker-client-v1',OLD_KEY='frontier-club-lobby-v1';
+const day=()=>{const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()};
+let savedOK=true;
+let user={name:'demopd',balance:10100,rewardDay:'',joined:['100001','200002'],customClubs:[],customRooms:[],favorites:[],agenda:[],sound:false};
+try{
+ let a=JSON.parse(localStorage.getItem(KEY)||'null');
+ if(!a){const old=JSON.parse(localStorage.getItem(OLD_KEY)||'null');if(old)a={balance:old.balance,rewardDay:old.rewardDay,sound:old.sound}}
+ if(a&&typeof a==='object'){
+  if(Number.isFinite(a.balance)&&a.balance>=0)user.balance=a.balance;
+  if(typeof a.rewardDay==='string')user.rewardDay=a.rewardDay;
+  if(typeof a.name==='string'&&a.name.trim())user.name=a.name.slice(0,16);
+  user.sound=a.sound===true;
+  if(Array.isArray(a.customClubs))user.customClubs=a.customClubs.filter(c=>c&&/^\d{6}$/.test(c.id)&&typeof c.name==='string'&&c.name.length<=24).map(c=>({...c,owner:true,color:'#d4eb67',mark:'R',members:1,tag:'我的私人俱樂部'}));
+  const known=DIRECTORY.concat(user.customClubs).map(c=>c.id);
+  if(Array.isArray(a.joined))user.joined=[...new Set(a.joined.filter(id=>known.includes(id)))];
+  if(Array.isArray(a.customRooms))user.customRooms=a.customRooms.filter(r=>r&&user.customClubs.some(c=>c.id===r.club)&&typeof r.id==='string'&&typeof r.name==='string'&&Number.isInteger(r.mode)&&r.mode>=0&&r.mode<3&&Number.isFinite(r.blind)&&r.blind>0).map(r=>({...r,seats:6,seated:0}));
+  if(Array.isArray(a.favorites))user.favorites=a.favorites.filter(v=>typeof v==='string');
+  if(Array.isArray(a.agenda))user.agenda=a.agenda.filter(id=>EVENTS.some(e=>e.id===id));
+ }
+}catch{savedOK=false}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(user));return true}catch{savedOK=false;return false}}
+const allClubs=()=>DIRECTORY.concat(user.customClubs),myClubs=()=>allClubs().filter(c=>user.joined.includes(c.id));
+const allRooms=()=>PUBLIC_ROOMS.concat(CLUB_ROOMS,user.customRooms);
+const clubById=id=>allClubs().find(c=>c.id===id);
+const S={page:'HOME',club:null,mode:-1,stake:0,onlyOpen:false,onlyFav:false,scroll:0,eventType:0,
+ modal:null,stack:[],hits:[],pressed:null,hover:null,focus:null,keyboard:false,toast:'',toastUntil:0,entered:0};
+let raf=0,signature='',formStamp='',audio=null;
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function invalidate(){if(!raf&&!document.hidden)raf=requestAnimationFrame(render)}
+function resize(){
+ const scale=Math.min((visualViewport?.width||innerWidth)/W,(visualViewport?.height||innerHeight)/H);
+ stage.style.width=W*scale+'px';stage.style.height=H*scale+'px';
+ const d=Math.min(devicePixelRatio||1,3);
+ canvas.width=Math.round(W*scale*d);canvas.height=Math.round(H*scale*d);invalidate();
+}
+addEventListener('resize',resize);visualViewport?.addEventListener('resize',resize);
+function path(x,y,w,h,r=12){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
+function rect(x,y,w,h,color,r=0){path(x,y,w,h,r);ctx.fillStyle=color;ctx.fill()}
+function border(x,y,w,h,color=P.line,r=12,n=1){path(x+.5,y+.5,w-1,h-1,r);ctx.strokeStyle=color;ctx.lineWidth=n;ctx.stroke()}
+function linear(x,y,w,h,a,b){const z=ctx.createLinearGradient(x,y,x+w,y+h);z.addColorStop(0,a);z.addColorStop(1,b);return z}
+function line(x,y,a,b,color=P.line,n=1){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(a,b);ctx.strokeStyle=color;ctx.lineWidth=n;ctx.stroke()}
+function circle(x,y,r,color,stroke){ctx.beginPath();ctx.arc(x,y,r,0,TAU);if(color){ctx.fillStyle=color;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1.4;ctx.stroke()}}
+function text(t,x,y,size=20,color=P.text,align='left',weight=500,max){
+ ctx.font=weight+' '+size+'px "Bahnschrift",Arial,"Microsoft JhengHei",sans-serif';ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillStyle=color;
+ if(max)ctx.fillText(String(t),x,y,max);else ctx.fillText(String(t),x,y);
+}
+function small(t,x,y,color=P.muted,align='left'){text(t,x,y,15,color,align)}
+function panel(x,y,w,h,{fill=P.panel,edge=P.line,r=15}={}){rect(x,y,w,h,linear(x,y,w,h,fill,'#171c21'),r);border(x,y,w,h,edge,r)}
+function wrap(t,x,y,width,size=21,color=P.text){
+ ctx.font='500 '+size+'px Arial,"Microsoft JhengHei",sans-serif';let s='',yy=y;
+ for(const ch of t){if(ch==='\n'||ctx.measureText(s+ch).width>width){text(s,x,yy,size,color);s=ch==='\n'?'':ch;yy+=size*1.6}else s+=ch}
+ if(s)text(s,x,yy,size,color);return yy+size*1.6;
+}
+function glyph(type,x,y,size=22,color=P.gold){
+ ctx.save();ctx.translate(x,y);ctx.scale(size/24,size/24);ctx.lineWidth=1.8;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=color;ctx.fillStyle=color;
+ ctx.beginPath();
+ switch(type){
+ case 'home':ctx.moveTo(-17,0);ctx.lineTo(0,-15);ctx.lineTo(17,0);ctx.moveTo(-11,-5);ctx.lineTo(-11,17);ctx.lineTo(11,17);ctx.lineTo(11,-5);ctx.moveTo(-3,17);ctx.lineTo(-3,6);ctx.lineTo(3,6);ctx.lineTo(3,17);ctx.stroke();break;
+ case 'group':circle(-6,-9,6,null,color);circle(9,-6,5,null,color);ctx.moveTo(-19,14);ctx.quadraticCurveTo(-16,0,-6,0);ctx.quadraticCurveTo(4,0,7,14);ctx.moveTo(9,2);ctx.quadraticCurveTo(18,3,21,14);ctx.stroke();break;
+ case 'clock':circle(0,0,17,null,color);ctx.moveTo(0,-10);ctx.lineTo(0,1);ctx.lineTo(8,5);ctx.stroke();break;
+
+ case 'spade':ctx.moveTo(0,-19);ctx.bezierCurveTo(-4,-12,-18,-4,-17,5);ctx.bezierCurveTo(-16,15,-7,15,-3,9);ctx.lineTo(-7,19);ctx.lineTo(7,19);ctx.lineTo(3,9);ctx.bezierCurveTo(7,15,16,15,17,5);ctx.bezierCurveTo(18,-4,4,-12,0,-19);ctx.closePath();ctx.fill();break;
+ case 'heart':ctx.moveTo(0,18);ctx.bezierCurveTo(-31,-2,-15,-25,0,-10);ctx.bezierCurveTo(15,-25,31,-2,0,18);ctx.fill();break;
+ case 'diamond':ctx.moveTo(0,-20);ctx.lineTo(15,0);ctx.lineTo(0,20);ctx.lineTo(-15,0);ctx.closePath();ctx.fill();break;
+ case 'club':[[0,-9],[-9,3],[9,3]].forEach(([a,b])=>{ctx.moveTo(a+9,b);ctx.arc(a,b,9,0,TAU)});ctx.moveTo(-2,3);ctx.lineTo(2,3);ctx.lineTo(7,20);ctx.lineTo(-7,20);ctx.closePath();ctx.fill();break;
+ case 'coin':circle(0,0,18,color);circle(0,0,14,null,'#624820');glyph('spade',0,0,15,'#614923');break;
+ case 'gem':ctx.moveTo(-18,-6);ctx.lineTo(-9,-16);ctx.lineTo(9,-16);ctx.lineTo(18,-6);ctx.lineTo(0,18);ctx.closePath();ctx.fill();line(-18,-6,18,-6,'#cbe3df');line(-8,-6,0,18,'#ffffff66');line(8,-6,0,18,'#ffffff66');break;
+ case 'menu':[-9,0,9].forEach(y=>{ctx.moveTo(-13,y);ctx.lineTo(13,y)});ctx.stroke();break;
+ case 'plus':ctx.moveTo(-10,0);ctx.lineTo(10,0);ctx.moveTo(0,-10);ctx.lineTo(0,10);ctx.stroke();break;
+ case 'close':ctx.moveTo(-9,-9);ctx.lineTo(9,9);ctx.moveTo(9,-9);ctx.lineTo(-9,9);ctx.stroke();break;
+ case 'arrow':ctx.moveTo(-5,-9);ctx.lineTo(4,0);ctx.lineTo(-5,9);ctx.stroke();break;
+ case 'search':circle(-3,-3,10,null,color);line(5,5,15,15,color,2);break;
+ case 'back':ctx.moveTo(6,-10);ctx.lineTo(-5,0);ctx.lineTo(6,10);ctx.stroke();break;
+ case 'person':circle(0,-8,6,color);ctx.beginPath();ctx.arc(0,13,12,Math.PI,0);ctx.fill();break;
+ case 'table':path(-16,-10,32,20,8);ctx.stroke();[-1,1].forEach(s=>{circle(s*10,-15,2,color);circle(s*10,15,2,color)});break;
+ case 'star':for(let i=0;i<10;i++){const a=i*Math.PI/5-Math.PI/2,r=i%2?8:18;i?ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r):ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r)}ctx.closePath();ctx.stroke();break;
+ case 'check':ctx.moveTo(-10,0);ctx.lineTo(-3,8);ctx.lineTo(12,-9);ctx.stroke();break;
+ case 'notice':path(-12,-17,24,34,3);ctx.stroke();[-7,0,7].forEach(y=>line(-6,y,6,y,color,1.5));break;
+ case 'mail':path(-17,-12,34,25,3);ctx.stroke();ctx.moveTo(-15,-10);ctx.lineTo(0,2);ctx.lineTo(15,-10);ctx.stroke();break;
+ case 'chart':rect(-15,2,7,15,color,1);rect(-3,-14,7,31,color,1);rect(9,-5,7,22,color,1);break;
+ case 'shop':ctx.moveTo(-18,-15);ctx.lineTo(-11,-15);ctx.lineTo(-5,7);ctx.lineTo(13,7);ctx.lineTo(18,-9);ctx.lineTo(-9,-9);ctx.stroke();circle(-3,15,2,color);circle(12,15,2,color);break;
+ case 'trophy':ctx.moveTo(-11,-15);ctx.lineTo(11,-15);ctx.lineTo(9,0);ctx.quadraticCurveTo(0,15,-9,0);ctx.closePath();ctx.stroke();ctx.moveTo(-11,-11);ctx.lineTo(-18,-11);ctx.quadraticCurveTo(-19,4,-7,4);ctx.moveTo(11,-11);ctx.lineTo(18,-11);ctx.quadraticCurveTo(19,4,7,4);ctx.moveTo(0,7);ctx.lineTo(0,16);ctx.moveTo(-9,18);ctx.lineTo(9,18);ctx.stroke();break;
+ case 'gift':path(-15,-3,30,23,2);ctx.stroke();path(-18,-8,36,7,1);ctx.stroke();line(0,-8,0,20,color,2);ctx.beginPath();ctx.moveTo(0,-8);ctx.bezierCurveTo(-27,-24,-7,-29,0,-8);ctx.bezierCurveTo(27,-24,7,-29,0,-8);ctx.stroke();break;
+ case 'wheel':circle(0,0,19,null,color);circle(0,0,12,null,color);for(let i=0;i<12;i++){const a=i*TAU/12;line(Math.cos(a)*12,Math.sin(a)*12,Math.cos(a)*18,Math.sin(a)*18,color)}glyph('spade',0,0,12,color);break;
+ }
+ ctx.restore();
+}
+
+function hit(id,label,x,y,w,h,fn,disabled=false){if(w>0&&h>0)S.hits.push({id,label,x,y,w,h,fn,disabled})}
+function feedback(id,x,y,w,h,r=12){
+ if(S.hover===id||S.pressed===id)rect(x+1,y+1,w-2,h-2,S.pressed===id?'#d4eb671d':'#ffffff09',r);
+ if(S.keyboard&&S.focus===id)border(x+3,y+3,w-6,h-6,P.gold,r,2);
+}
+function button(id,label,x,y,w,h,fn,{primary=false,icon,disabled=false}={}){
+ ctx.save();if(disabled)ctx.globalAlpha=.38;
+ rect(x,y,w,h,primary?P.gold:'#272f35',10);if(!primary)border(x,y,w,h,'#3d484f',10);
+ if(icon)glyph(icon,x+(label?23:w/2),y+h/2,20,primary?'#192016':P.text);
+ if(label)text(label,x+w/2+(icon?10:0),y+h/2,18,primary?'#151d12':P.light,'center',600,w-(icon?43:24));
+ ctx.restore();hit(id,label||icon,x,y,w,h,fn,disabled);feedback(id,x,y,w,h,10);
+}
+function link(id,label,x,y,w,fn){text(label,x+w,y,16,P.gold,'right',500);hit(id,label,x,y-22,w,44,fn);feedback(id,x,y-22,w,44,6)}
+function pill(label,x,y,w,color=P.gold){rect(x,y,w,24,color+'19',5);text(label,x+w/2,y+12,12,color,'center',600)}
+function clickSound(){if(!user.sound)return;try{
+ audio??=new (window.AudioContext||window.webkitAudioContext)();audio.resume();const o=audio.createOscillator(),a=audio.createGain(),t=audio.currentTime;
+ o.frequency.setValueAtTime(570,t);o.frequency.exponentialRampToValueAtTime(330,t+.065);a.gain.setValueAtTime(.025,t);a.gain.exponentialRampToValueAtTime(.0001,t+.08);
+ o.connect(a);a.connect(audio.destination);o.start(t);o.stop(t+.09);
+}catch{}}
+function activate(h){if(!h||h.disabled)return;clickSound();S.pressed=null;h.fn();invalidate()}
+function transition(){S.entered=performance.now();S.focus=null;S.hover=null;S.pressed=null;invalidate()}
+function go(page){S.page=page;S.modal=null;S.stack=[];S.scroll=0;entry.blur();transition()}
+function open(type,data={}){if(S.modal)S.stack.push(S.modal);S.modal={type,...data};formStamp='';transition();announce.textContent=data.title||type}
+function back(){S.modal=S.stack.pop()||null;formStamp='';entry.blur();transition();canvas.focus({preventScroll:true})}
+function closeAll(){S.modal=null;S.stack=[];entry.blur();transition()}
+function notify(t){S.toast=t;S.toastUntil=performance.now()+2800;announce.textContent=t;invalidate()}
+function roomRoute(club=null,mode=-1){S.club=club;S.mode=mode;S.stake=0;S.onlyOpen=false;S.onlyFav=false;go('TABLES')}
+function favorite(id){const i=user.favorites.indexOf(id);i<0?user.favorites.push(id):user.favorites.splice(i,1);save();invalidate()}
+function schedule(id){const i=user.agenda.indexOf(id);i<0?user.agenda.push(id):user.agenda.splice(i,1);save();notify(i<0?'已加入本機行程':'已從行程移除')}
+function daily(){if(user.rewardDay===day())return;user.rewardDay=day();user.balance+=500;save();closeAll();open('reward');}
+function filteredRooms(){return allRooms().filter(r=>(S.club==='FAVORITES'?user.favorites.includes(r.id):r.club===S.club)&&(S.mode<0||r.mode===S.mode)&&(!S.onlyOpen||r.seated<r.seats)&&(!S.onlyFav||user.favorites.includes(r.id))&&(S.stake===0||S.stake===1&&r.blind<=5||S.stake===2&&r.blind>5&&r.blind<=25||S.stake===3&&r.blind>25))}
+function emblem(mark,x,y,color=P.teal,size=28){
+ ctx.save();ctx.translate(x,y);ctx.rotate(Math.PI/4);rect(-size,-size,size*2,size*2,color+'13',9);border(-size,-size,size*2,size*2,color+'55',9);ctx.restore();
+ text(mark,x,y+1,size*.95,color,'center',700);
+}
+function chip(x,y,r,color='#d4eb67'){
+ ctx.save();ctx.shadowColor='#0008';ctx.shadowBlur=14;ctx.shadowOffsetY=9;circle(x,y,r,'#202725',color);ctx.shadowBlur=0;ctx.shadowOffsetY=0;
+ circle(x,y,r-5,null,'#768459');circle(x,y,r*.67,'#2b3527',color+'aa');
+ for(let i=0;i<12;i++){const a=i*TAU/12;line(x+Math.cos(a)*(r-8),y+Math.sin(a)*(r-8),x+Math.cos(a)*(r-2),y+Math.sin(a)*(r-2),color,5)}
+ glyph('spade',x,y,r*.61,color);ctx.restore();
+}
+function playingCard(x,y,w,h,angle,suit){
+ ctx.save();ctx.translate(x,y);ctx.rotate(angle);ctx.shadowColor='#0009';ctx.shadowBlur=20;ctx.shadowOffsetY=11;
+ rect(-w/2,-h/2,w,h,linear(0,-h/2,0,h,'#f4f4e7','#bfc9bd'),8);ctx.shadowBlur=0;ctx.shadowOffsetY=0;
+ border(-w/2+4,-h/2+4,w-8,h-8,'#aebaa9',5);const color=suit==='heart'?'#b74243':'#243225';
+ text('A',-w/2+19,-h/2+27,25,color,'center',700);glyph(suit,0,16,37,color);ctx.restore();
+}
+function background(){rect(0,0,W,H,P.bg);rect(0,0,W,340,linear(0,0,0,340,'#1d2623','#111418'))}
+function header(){
+ emblem('R',55,45,P.gold,20);text('RIVER',96,34,26,P.light,'left',750);small('POKER & CLUBS',96,60,'#8d9a91');
+ circle(505,45,22,'#303b32');text(user.name.slice(0,1).toUpperCase(),505,46,20,P.gold,'center',650);
+ hit('profile','個人資料',478,18,54,55,()=>open('profile'));feedback('profile',478,18,54,55);
+ text(user.name,544,45,17,P.light,'left',600,96);button('notifications','',651,21,44,48,()=>open('notices'),{icon:'notice'});
+ panel(28,91,664,72,{fill:'#242e29',edge:'#3c4840',r:12});
+ small('虛擬點數',48,112,'#92a295');text(user.balance.toLocaleString(),48,141,24,P.light,'left',650);
+ line(245,109,245,148,'#49534977');small('我的俱樂部',269,112);text(String(myClubs().length).padStart(2,'0'),269,141,23,P.text,'left',600);
+ button('header-reward',user.rewardDay===day()?'已領獎勵':'每日獎勵',532,108,141,40,()=>open('daily'),{icon:user.rewardDay===day()?'check':'gift'});
+}
+function hero(){
+ small('PLAY. CONNECT. COMPETE.',29,197,P.gold);text('你的下一手，從這裡開始。',28,233,29,P.light,'left',650);
+ const x=28,y=262,w=664,h=220;
+ panel(x,y,w,h,{fill:'#334331',edge:'#4e5d3d',r:18});
+ ctx.save();path(x+1,y+1,w-2,h-2,17);ctx.clip();
+ for(let i=0;i<5;i++)line(415+i*45,y-15,260+i*70,y+h+15,'#d4eb670b',13);
+ rect(448,y,260,h,linear(448,y,260,0,'#11181100','#111811aa'));
+ playingCard(526,351,93,128,-.25,'spade');playingCard(599,351,93,128,.15,'heart');chip(557,432,43);
+ ctx.restore();pill('FEATURED SERIES',49,280,143);
+ text('SUNDAY',48,333,35,P.light,'left',750);text('SHOWDOWN',48,373,35,P.light,'left',750);
+ small('週日 20:00  /  NLH',49,407,'#b6c4b0');
+ button('hero-event','查看賽事',49,430,172,37,()=>open('event',{event:EVENTS[0]}),{primary:true});
+ small('示範賽程',395,294,'#a1ae98','right');
+}
+function clubCard(c,x,y,w,h=106){
+ const id='club-'+c.id;panel(x,y,w,h,{fill:'#20272a',edge:'#364247',r:13});emblem(c.mark,x+50,y+h/2,c.color,25);
+ text(c.name,x+99,y+32,24,P.light,'left',650,w-184);small('ID '+c.id+'  ·  '+(c.owner?'建立者':c.members+' 位成員'),x+99,y+66);
+ if(h>110)small(c.tag,x+99,y+103,'#7f9892');
+ glyph('arrow',x+w-28,y+h/2,22,c.color);
+ hit(id,'進入 '+c.name,x,y,w,h,()=>roomRoute(c.id));feedback(id,x,y,w,h);
+}
+function home(){
+ hero();text('選擇玩法',29,515,22,P.light,'left',650);link('all-tables','全部牌桌  ›',552,515,138,()=>roomRoute());
+ MODES.forEach((m,i)=>{const x=28+i*225,y=543,id='mode-'+i;panel(x,y,214,110,{fill:'#252b2d',edge:'#3b4546'});
+ rect(x+17,y+17,3,21,m.color,1);text(m.name,x+32,y+28,m.id==='6+'?18:22,P.light,'left',650,169);
+ small(m.zh,x+18,y+64);glyph(m.suit,x+178,y+76,26,m.color);
+ hit(id,'瀏覽'+m.zh,x,y,214,110,()=>roomRoute(null,i));feedback(id,x,y,214,110)});
+ text('我的俱樂部',29,697,23,P.light,'left',650);link('home-join','加入俱樂部  +',529,697,161,()=>open('join',{value:''}));
+ const clubs=myClubs().slice(0,2);
+ if(clubs.length)clubs.forEach((c,i)=>clubCard(c,28,725+i*118,664));
+ else {panel(28,725,664,220);text('找到一起打牌的人',53,775,26,P.light,'left',600);small('輸入俱樂部 ID，或建立自己的俱樂部。',53,819);button('first-club','加入俱樂部',53,858,205,53,()=>open('join',{value:''}),{primary:true})}
+ if(clubs.length===1){button('home-create','建立自己的俱樂部',28,851,664,94,()=>open('create',{value:''}),{icon:'plus'})}
+ text('下一場賽事',29,996,23,P.light,'left',650);link('all-events','賽事日程  ›',550,996,140,()=>go('EVENTS'));
+ panel(28,1026,664,122,{fill:'#262b24',edge:'#4a503a'});pill('NLH',48,1044,48);
+ text('DAILY DEEP STACK',48,1090,24,P.light,'left',650,422);small('每日 19:30 · 買入 100 點',48,1123);
+ button('next-event','詳情',564,1067,108,49,()=>open('event',{event:EVENTS[1]}));
+}
+const NAV=[['HOME','大廳','home'],['CLUBS','俱樂部','group'],['TABLES','牌桌','spade'],['EVENTS','賽事','trophy'],['ME','我的','person']];
+function nav(){
+ rect(0,1175,720,105,'#181e22');line(0,1175,720,1175,'#3b4346');
+ NAV.forEach(([page,label,icon],i)=>{
+  const x=i*144,on=S.page===page;
+  if(on)rect(x+27,1187,90,48,'#d4eb6713',12);
+  glyph(icon,x+72,1210,24,on?P.gold:'#79868d');text(label,x+72,1250,16,on?P.gold:'#8b969d','center',on?650:500);
+  if(on)rect(x+63,1267,18,2,P.gold,1);
+  hit('nav-'+page,label,x+4,1180,136,98,()=>{if(page==='TABLES')roomRoute();else go(page)});feedback('nav-'+page,x+15,1186,114,82);
+ });
+}
+function heading(title,sub){text(title,29,205,32,P.light,'left',700);small(sub,29,244)}
+function listViewport(top,bottom,count,rowH,drawRow){
+ const view=bottom-top,max=Math.max(0,count*rowH-view);S.scroll=Math.max(0,Math.min(S.scroll,max));
+ ctx.save();path(23,top,674,view,0);ctx.clip();
+ for(let i=0;i<count;i++){const y=top+i*rowH-S.scroll;if(y+rowH>top&&y<bottom)drawRow(i,y,top,bottom)}
+ ctx.restore();
+ if(max>0){const h=Math.max(35,view*view/(count*rowH)),y=top+(view-h)*S.scroll/max;rect(704,top,3,view,'#ffffff0b',2);rect(704,y,3,h,'#7e9185',2)}
+}
+function clubsPage(){
+ heading('我的俱樂部','與熟悉的朋友，找到下一張牌桌。');
+ button('join-club','加入俱樂部',28,279,324,58,()=>open('join',{value:''}),{primary:true,icon:'plus'});
+ button('create-club','建立俱樂部',368,279,324,58,()=>open('create',{value:''}),{icon:'group'});
+ small(myClubs().length+' 個俱樂部',29,372);small('本機示範',690,372,P.muted,'right');
+ const clubs=myClubs();
+ listViewport(399,1137,clubs.length,163,(i,y,top,bottom)=>{
+  const start=S.hits.length;clubCard(clubs[i],28,y,664,145);
+  const h=S.hits[start];if(h){h.y=Math.max(y,top);h.h=Math.max(0,Math.min(y+145,bottom)-h.y)}
+ });
+ if(!clubs.length)empty('group','你還沒有加入俱樂部','使用上方按鈕開始，試用 ID：300003。',680);
+ small('俱樂部、收藏與偏好儲存在此瀏覽器',360,1155,'#737f86','center');
+}
+function tablesPage(){
+ const c=S.club?clubById(S.club):null;
+ heading(c?c.name:S.club==='FAVORITES'?'收藏牌桌':'公開牌桌',c?'CLUB '+c.id+'  ·  '+(c.owner?'我的俱樂部':'示範俱樂部'):S.club==='FAVORITES'?'公開牌桌與俱樂部收藏，一起整理。':'依玩法與盲注，找到適合你的牌桌。');
+ if(c)button('club-info','俱樂部資訊',528,185,163,52,()=>open('clubInfo',{club:c}),{});
+ const modes=[['全部',-1],...MODES.map((m,i)=>[m.id,i])];
+ modes.forEach(([label,i],j)=>button('filter-mode-'+i,label,28+j*170,278,154,48,()=>{S.mode=i;S.scroll=0;invalidate()},{primary:S.mode===i}));
+ ['全部盲注','低盲注','中盲注','高盲注'].forEach((t,i)=>button('filter-stake-'+i,t,28+i*170,344,154,44,()=>{S.stake=i;S.scroll=0;invalidate()},{primary:S.stake===i}));
+ button('filter-open',S.onlyOpen?'只看空位':'全部座位',28,409,173,43,()=>{S.onlyOpen=!S.onlyOpen;S.scroll=0;invalidate()},{icon:S.onlyOpen?'check':null});
+ button('filter-fav',S.club==='FAVORITES'?'我的收藏':S.onlyFav?'只看收藏':'全部牌桌',214,409,174,43,()=>{S.onlyFav=!S.onlyFav;S.scroll=0;invalidate()},{icon:'star',disabled:S.club==='FAVORITES'});
+ if(c?.owner)button('add-table','新增牌桌',520,409,172,43,()=>open('newRoom',{club:c,mode:0,blind:0,value:''}),{icon:'plus',primary:true});
+ const rows=filteredRooms();small(rows.length+' 張牌桌  /  示範資料',29,483);small('盲注',361,483);small('座位',471,483);
+ listViewport(510,1135,rows.length,133,(i,y,top,bottom)=>{
+  const r=rows[i],m=MODES[r.mode];panel(28,y,664,117,{fill:'#21282d',edge:'#343d44'});
+  pill(m.id,44,y+16,51,m.color);text(r.name,111,y+27,19,P.light,'left',600,230);
+  small(r.id,45,y+65);small(r.blind*100+'–'+r.blind*200+' 買入',45,y+92);
+  text(r.blind+' / '+r.blind*2,361,y+40,22,P.light,'left',600,104);small(r.seated===r.seats?'滿桌':'有空位',471,y+75,r.seated===r.seats?'#ad9381':P.teal);text(r.seated+'/'+r.seats,471,y+40,21);
+  glyph('star',554,y+38,18,user.favorites.includes(r.id)?P.gold:'#697782');
+  hit('fav-'+r.id,'收藏 '+r.id,532,Math.max(top,y+13),44,Math.max(0,Math.min(bottom,y+65)-Math.max(top,y+13)),()=>favorite(r.id));
+  if(y+33>=top&&y+83<=bottom)button('table-'+r.id,'查看',593,y+33,80,50,()=>open('room',{room:r}));
+ });
+ if(!rows.length){empty('search','沒有符合的牌桌',c?.owner?'可以新增示範牌桌，或調整上方篩選。':'試著切換玩法、盲注或收藏篩選。',738)}
+ small('上下滑動瀏覽',360,1155,'#737f86','center');
+}
+function eventCard(e,y){
+ panel(28,y,664,171,{fill:'#22282b',edge:'#3d4749'});rect(28,y+15,3,141,e.accent,2);
+ pill(e.type,48,y+18,48,e.accent);small(e.zh,111,y+31);small(e.time,669,y+31,P.light,'right');
+ text(e.name,48,y+80,27,P.light,'left',700,588);
+ small('買入 '+e.fee+' 點  ·  '+e.structure,48,y+127);
+ button('event-'+e.id,'詳情',569,y+110,103,43,()=>open('event',{event:e}));
+ if(user.agenda.includes(e.id)){glyph('check',649,y+75,15,P.gold)}
+}
+function eventsPage(){
+ heading('賽事日程','安排你的下一場挑戰。');
+ ['全部賽事','NLH','我的行程'].forEach((t,i)=>button('tour-filter-'+i,t,28+i*225,279,214,49,()=>{S.eventType=i;S.scroll=0;invalidate()},{primary:S.eventType===i}));
+ small('展示賽程 · 尚未開放報名',29,365);
+ const list=EVENTS.filter(e=>S.eventType===0||S.eventType===1&&e.type==='NLH'||S.eventType===2&&user.agenda.includes(e.id));
+ listViewport(393,1138,list.length,190,(i,y,top,bottom)=>{
+ const count=S.hits.length;eventCard(list[i],y);
+ for(let j=count;j<S.hits.length;j++){const b=S.hits[j];if(b.y<top||b.y+b.h>bottom)b.disabled=true}
+ });
+ if(!list.length)empty('clock','還沒有安排賽事','打開賽事詳情，即可加入你的本機行程。',704);
+}
+function empty(icon,title,desc,y){circle(360,y,49,'#243029');glyph(icon,360,y,37,P.teal);text(title,360,y+86,25,P.light,'center',600);wrap(desc,116,y+135,488,19,P.muted)}
+function mePage(){
+ heading('我的帳戶','你的俱樂部、收藏與個人偏好。');
+ panel(28,283,664,133);circle(91,349,37,'#34463b');text(user.name[0].toUpperCase(),91,349,33,P.gold,'center',700);
+ text(user.name,153,330,29,P.light,'left',600);small('ID 845481  ·  本機帳戶',153,370);button('edit-name','編輯',577,330,94,44,()=>open('rename',{value:user.name}));
+ const stats=[['俱樂部',myClubs().length],['收藏牌桌',user.favorites.length],['我的行程',user.agenda.length]];
+ stats.forEach(([t,v],i)=>{panel(28+i*225,438,214,115);small(t,135+i*225,469,P.muted,'center');text(v,135+i*225,511,29,P.light,'center',650)});
+ const rows=[['gift','每日獎勵',user.rewardDay===day()?'今日已領取':'+500 虛擬點數',()=>open('daily')],
+ ['star','收藏牌桌','快速找到喜歡的牌桌',()=>roomRoute('FAVORITES')],
+ ['clock','我的行程',user.agenda.length+' 場賽事',()=>{S.eventType=2;go('EVENTS')}],
+ ['menu','偏好設定',user.sound?'音效開啟':'音效關閉',()=>open('settings')]];
+ rows.forEach(([icon,title,sub,fn],i)=>{const y=586+i*125;panel(28,y,664,109);glyph(icon,63,y+52,25,P.teal);text(title,109,y+35,23,P.light,'left',600);small(sub,109,y+72);glyph('arrow',660,y+52,22,P.muted);hit('me-'+i,title,28,y,664,109,fn);feedback('me-'+i,28,y,664,109)});
+ small('RIVER  /  POKER & CLUBS',360,1137,'#63717a','center');
+}
+function field(label,x,y,w,value,type='text',placeholder=''){
+ text(label,x,y-24,18,P.muted);
+ const scale=stage.clientWidth/W;
+ Object.assign(entry.style,{display:'block',left:x/W*100+'%',top:y/H*100+'%',width:w/W*100+'%',height:55/H*100+'%',fontSize:Math.max(16,21*scale)+'px'});
+ entry.type='text';entry.inputMode=type==='number'?'numeric':'text';entry.maxLength=type==='number'?6:24;entry.placeholder=placeholder;entry.setAttribute('aria-label',label);
+ const stamp=S.modal?.type+'|'+S.stack.length;
+ if(formStamp!==stamp){entry.value=value||'';formStamp=stamp}
+}
+function handleSubmit(){
+ const m=S.modal;if(!m)return;
+ const value=entry.value.trim();m.value=value;m.error='';
+ if(m.type==='join'){
+  if(!/^\d{6}$/.test(value)){m.error='請輸入 6 位數俱樂部 ID。';invalidate();return}
+  const found=clubById(value);if(!found){m.error='找不到這個示範俱樂部，可試用 300003。';invalidate();return}
+  if(user.joined.includes(value)){m.error='你已經加入此俱樂部。';invalidate();return}
+  user.joined.push(value);save();go('CLUBS');notify('已加入 '+found.name+'（本機示範）');
+ }else if(m.type==='create'){
+  if([...value].length<2||[...value].length>24){m.error='名稱需要 2–24 個字元。';invalidate();return}
+  if(allClubs().some(c=>c.name.toLowerCase()===value.toLowerCase())){m.error='已有相同名稱，請換一個名稱。';invalidate();return}
+  let id;do{id=String(400000+Math.floor(Math.random()*500000))}while(clubById(id));
+  const c={id,name:value,tag:'我的私人俱樂部',members:1,owner:true,color:P.gold,mark:value[0].toUpperCase()};
+  user.customClubs.push(c);user.joined.push(id);save();roomRoute(id);notify('已建立本機俱樂部，可新增示範牌桌。');
+ }else if(m.type==='newRoom'){
+  if(!value){m.error='請輸入牌桌名稱。';invalidate();return}
+  if(!user.customClubs.some(c=>c.id===m.club.id)){m.error='只有建立者可以新增牌桌。';invalidate();return}
+  const r={id:'L'+Date.now().toString(36)+'-'+Math.floor(Math.random()*1000),club:m.club.id,mode:m.mode,name:value.slice(0,24),blind:[1,2,5,10][m.blind],seats:6,seated:0};
+  user.customRooms.push(r);save();roomRoute(m.club.id);notify('已新增示範牌桌。');
+ }else if(m.type==='rename'){
+  if([...value].length<2||[...value].length>16){m.error='暱稱需要 2–16 個字元。';invalidate();return}
+  user.name=value;save();back();notify('暱稱已更新。');
+ }
+}
+entry.addEventListener('input',()=>{if(S.modal){S.modal.value=entry.value;S.modal.error='';invalidate()}});
+entry.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();handleSubmit()}if(e.key==='Escape'){e.preventDefault();back()}});
+function modal(){
+ const m=S.modal,x=38,w=644,y=m.type==='newRoom'?267:330,h=m.type==='newRoom'?790:650;
+ const p=reduced?1:Math.min(1,(performance.now()-S.entered)/160);
+ rect(0,0,W,H,'rgba(0,0,0,'+(.72*p)+')');
+ panel(x,y,w,h,{fill:'#242d32',edge:'#46534f',r:19});rect(x+25,y,55,3,P.gold,1);
+ const titles={join:'加入俱樂部',create:'建立俱樂部',newRoom:'新增示範牌桌',rename:'編輯暱稱',clubInfo:'俱樂部資訊',daily:'每日獎勵',reward:'獎勵已入帳',room:'牌桌詳情',event:'賽事詳情',profile:'個人資料',settings:'偏好設定',notices:'俱樂部公告'};
+ text(m.title||titles[m.type]||'RIVER',x+29,y+44,29,P.light,'left',650,w-118);button('modal-close','',x+w-77,y+20,51,48,back,{icon:'close'});
+ line(x+25,y+87,x+w-25,y+87,P.line);
+ let yy=y+124;const body=a=>a.forEach(t=>{yy=wrap(t,x+30,yy,w-60,21)+15});
+ if(['join','create','rename'].includes(m.type)){
+  field(m.type==='join'?'俱樂部 ID':m.type==='create'?'俱樂部名稱':'暱稱',x+30,y+162,w-60,m.value,m.type==='join'?'number':'text',m.type==='join'?'輸入 6 位數 ID':'輸入名稱');
+  if(m.error)text(m.error,x+31,y+246,17,'#edab94','left',500,w-62);
+  yy=y+293;
+  if(m.type==='join')body(['示範俱樂部 ID：300003','加入後，可以瀏覽俱樂部的專屬牌桌。','此版本的加入紀錄只儲存在目前瀏覽器。']);
+  else if(m.type==='create')body(['建立後，你將成為俱樂部管理者。','可以新增示範牌桌，規劃遊戲模式及盲注。','俱樂部只建立在此瀏覽器，尚未連接伺服器。']);
+  else body(['暱稱將顯示於大廳及個人資料。']);
+  button('form-submit',m.type==='join'?'加入俱樂部':m.type==='create'?'建立本機俱樂部':'儲存暱稱',x+30,y+h-88,w-60,58,handleSubmit,{primary:true});return;
+ }else if(m.type==='newRoom'){
+  field('牌桌名稱',x+30,y+160,w-60,m.value,'text','例如：週末好友桌');
+  small('遊戲模式',x+30,y+254);
+  MODES.forEach((v,i)=>button('room-mode-'+i,v.id,x+30+i*197,y+279,186,48,()=>{m.mode=i;invalidate()},{primary:m.mode===i}));
+  small('盲注',x+30,y+365);
+  ['1 / 2','2 / 4','5 / 10','10 / 20'].forEach((v,i)=>button('room-blind-'+i,v,x+30+i*147,y+393,137,48,()=>{m.blind=i;invalidate()},{primary:m.blind===i}));
+  yy=y+494;body(['6 人桌 · 初始 0 人','新增設定後會出現在本機俱樂部牌桌列表。','多人連線與實際對局尚未開放。']);
+  if(m.error)text(m.error,x+30,y+661,17,'#edab94');
+  button('form-submit','新增牌桌',x+30,y+h-88,w-60,58,handleSubmit,{primary:true});return;
+ }else if(m.type==='clubInfo'){
+  const c=m.club;emblem(c.mark,360,y+148,c.color,34);text(c.name,360,y+220,28,P.light,'center',650,w-65);
+  yy=y+279;body(['俱樂部 ID：'+c.id,'成員：'+c.members+'    ·    '+(c.owner?'我的俱樂部':'本機示範'),'牌桌：'+allRooms().filter(r=>r.club===c.id).length+' 張']);
+  if(c.owner)button('info-add-room','新增牌桌',x+30,y+458,w-60,52,()=>open('newRoom',{club:c,mode:0,blind:0,value:''}),{primary:true});
+  else button('leave-club','退出此俱樂部',x+30,y+458,w-60,52,()=>open('leave',{club:c}));
+ }else if(m.type==='leave'){
+  body(['退出 '+m.club.name+'？','這會移除此瀏覽器中的俱樂部加入紀錄。']);
+  button('confirm-leave','確認退出',x+30,y+440,w-60,55,()=>{user.joined=user.joined.filter(id=>id!==m.club.id);save();go('CLUBS');notify('已退出俱樂部。')},{primary:true});
+ }else if(m.type==='daily'||m.type==='reward'){
+  circle(360,y+174,52,'#d4eb6710');glyph(m.type==='reward'?'check':'gift',360,y+174,43,P.gold);
+  text('+500',360,y+273,58,P.gold,'center',700);text('虛擬點數',360,y+325,21,P.muted,'center');
+  text(m.type==='reward'?'已加入你的帳戶':user.rewardDay===day()?'今天已領取，明天再來。':'每天回來，領取你的每日獎勵。',360,y+398,21,P.text,'center',500,w-65);
+  if(!savedOK)small('無法保存紀錄；目前只保留本次使用。',360,y+477,'#ddb88e','center');
+  if(m.type==='daily'){button('claim',user.rewardDay===day()?'今日已領取':'領取 500 點',x+30,y+h-88,w-60,58,daily,{primary:true,disabled:user.rewardDay===day()});return}
+ }else if(m.type==='event'){
+  const e=m.event;pill(e.type,x+30,yy-8,55,e.accent);yy+=53;
+  text(e.name,x+30,yy,29,P.light,'left',700,w-60);yy+=51;body([e.zh+'  ·  '+e.time,'買入 '+e.fee+' 虛擬點數  /  '+e.structure,'此處為示範賽程，尚未開放報名。','加入本機行程可儲存此賽事；不會扣除點數。']);
+  button('schedule-event',user.agenda.includes(e.id)?'從我的行程移除':'加入我的行程',x+30,y+463,w-60,54,()=>schedule(e.id),{primary:true,icon:user.agenda.includes(e.id)?'check':'clock'});
+ }else if(m.type==='room'){
+  const r=m.room;body([r.name,MODES[r.mode].zh+'  ·  '+(r.club?clubById(r.club)?.name||'俱樂部':'公開牌桌'),'盲注 '+r.blind+' / '+r.blind*2+'   ·   '+r.seated+' / '+r.seats+' 人','買入範圍 '+r.blind*100+'–'+r.blind*200+' 虛擬點數','牌桌設定供預覽，尚未開放實際對局。']);
+  button('detail-favorite',user.favorites.includes(r.id)?'取消收藏':'收藏此牌桌',x+30,y+457,w-60,55,()=>favorite(r.id),{icon:'star',primary:true});
+ }else if(m.type==='profile'){body([user.name,'ID 845481','已加入 '+myClubs().length+' 個俱樂部','虛擬點數 '+user.balance.toLocaleString()]);button('profile-edit','編輯暱稱',x+30,y+430,w-60,55,()=>open('rename',{value:user.name}),{primary:true})}
+ else if(m.type==='settings'){
+  text('按鈕音效',x+30,yy+10,23);button('sound',user.sound?'開啟':'關閉',x+w-170,yy-13,140,49,()=>{user.sound=!user.sound;save();clickSound();invalidate()},{primary:user.sound});
+  yy+=100;body(['觸控：點選入口；上下滑動列表。','鍵盤：Tab 選取，Enter 開啟，Escape 返回。','俱樂部、行程與獎勵記錄儲存在此瀏覽器。']);
+ }else if(m.type==='notices'){body(['歡迎來到 RIVER','用俱樂部找到你的朋友，從牌桌探索不同玩法。','試用俱樂部 ID：300003','目前牌桌及賽事為示範資料。'])}
+ else body(m.body||[]);
+ button('modal-back',S.stack.length?'返回':'關閉',x+30,y+h-88,w-60,58,back);
+}
+function syncControls(){
+ const key=S.hits.map(h=>h.id+h.label+h.disabled).join('|');if(key===signature)return;signature=key;
+ const frag=document.createDocumentFragment();
+ S.hits.forEach(h=>{const b=document.createElement('button');b.type='button';b.tabIndex=-1;b.textContent=h.label;b.disabled=h.disabled;b.onclick=()=>activate(S.hits.find(v=>v.id===h.id));frag.append(b)});
+ controls.replaceChildren(frag);
+}
+function render(now){
+ raf=0;ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);S.hits=[];
+ background();header();
+ if(S.page==='HOME')home();else if(S.page==='CLUBS')clubsPage();else if(S.page==='TABLES')tablesPage();else if(S.page==='EVENTS')eventsPage();else mePage();
+ nav();if(!S.modal||!['join','create','newRoom','rename'].includes(S.modal.type))entry.style.display='none';
+ if(S.modal){S.hits=[];modal()}
+ if(S.toast&&now<S.toastUntil){rect(58,1096,604,60,'#334432',12);border(58,1096,604,60,'#8a9f60',12);text(S.toast,360,1126,18,P.light,'center',500,574)}
+ syncControls();
+ if((S.modal&&!reduced&&now-S.entered<180)||(S.toast&&now<S.toastUntil))invalidate();
+}
+function point(e){const r=canvas.getBoundingClientRect();return {x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height}}
+function target(p){return [...S.hits].reverse().find(h=>!h.disabled&&p.x>=h.x&&p.x<=h.x+h.w&&p.y>=h.y&&p.y<=h.y+h.h)}
+function scrollArea(){if(S.modal)return null;return S.page==='CLUBS'?[399,1137]:S.page==='TABLES'?[510,1135]:S.page==='EVENTS'?[393,1138]:null}
+let pointer=null;
+canvas.addEventListener('pointerdown',e=>{
+ if(pointer)return;const p=point(e),area=scrollArea();pointer={id:e.pointerId,start:p,last:p,drag:false,scroll:area&&p.y>=area[0]&&p.y<=area[1]};
+ S.pressed=target(p)?.id||null;S.keyboard=false;canvas.setPointerCapture(e.pointerId);invalidate();
+});
+canvas.addEventListener('pointermove',e=>{
+ const p=point(e);if(pointer?.id===e.pointerId){if(Math.hypot(p.x-pointer.start.x,p.y-pointer.start.y)>9){pointer.drag=true;S.pressed=null}
+ if(pointer.drag&&pointer.scroll){S.scroll-=p.y-pointer.last.y;invalidate()}pointer.last=p;
+ }else {const h=target(p);canvas.style.cursor=h?'pointer':'default';if(S.hover!==h?.id){S.hover=h?.id||null;invalidate()}}
+});
+canvas.addEventListener('pointerup',e=>{if(pointer?.id!==e.pointerId)return;const h=target(point(e)),ok=!pointer.drag&&h?.id===S.pressed;pointer=null;S.pressed=null;if(ok)activate(h);invalidate()});
+function cancel(){pointer=null;S.pressed=null;invalidate()}
+canvas.addEventListener('pointercancel',cancel);canvas.addEventListener('lostpointercapture',()=>{if(pointer)cancel()});
+canvas.addEventListener('pointerleave',()=>{S.hover=null;invalidate()});
+canvas.addEventListener('wheel',e=>{if(scrollArea()){e.preventDefault();S.scroll+=e.deltaY*(e.deltaMode===1?16:1);invalidate()}},{passive:false});
+canvas.addEventListener('keydown',e=>{
+ if(e.key==='Escape'){e.preventDefault();if(S.modal)back();else if(S.page==='TABLES'&&S.club)go('CLUBS');else go('HOME')}
+ if(e.key==='Tab'){e.preventDefault();const a=S.hits.filter(h=>!h.disabled),i=a.findIndex(h=>h.id===S.focus);S.focus=a[(i+(e.shiftKey?-1:1)+a.length)%a.length]?.id;S.keyboard=true;invalidate()}
+ if(e.key==='Enter'||e.key===' '){e.preventDefault();activate(S.hits.find(h=>h.id===S.focus))}
+ if((e.key==='ArrowDown'||e.key==='ArrowUp')&&scrollArea()){e.preventDefault();S.scroll+=e.key==='ArrowDown'?100:-100;invalidate()}
+});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(raf);raf=0;pointer=null;S.pressed=null}else invalidate()});
+resize();
+})();
+</script></body></html>
