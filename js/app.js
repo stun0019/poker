@@ -6,10 +6,9 @@
 */
 
 const W=720,H=1280,TAU=Math.PI*2;
+let VIEW_H=H;
 const canvas=document.getElementById('game'),ctx=canvas.getContext('2d',{alpha:false});
 const stage=document.getElementById('stage'),entry=document.getElementById('entry'),controls=document.getElementById('controls'),announce=document.getElementById('announce');
-const standalone=matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches||navigator.standalone===true;
-document.documentElement.classList.toggle('ios-standalone',standalone);
 const P={bg:'#ffffff',panel:'#f5f6f8',gold:'#00ad64',light:'#17202b',text:'#303841',muted:'#89929d',line:'#e5e7eb',teal:'#08b568'};
 const MODES=[{id:'NLH',name:"HOLD'EM",zh:'德州撲克',color:'#c98324'},{id:'PLO',name:'OMAHA',zh:'奧馬哈',color:'#c98324'},{id:'6+',name:'SHORT DECK',zh:'短牌',color:'#c98324'}];
 const KEY='clubgg-h5-prototype-v1',LEGACY_KEY='river-poker-client-v1';
@@ -67,19 +66,17 @@ const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function invalidate(){if(!raf&&!document.hidden)raf=requestAnimationFrame(render)}
 function resize(){
  const viewport=visualViewport;
- const vw=standalone?Math.max(document.documentElement.clientWidth,innerWidth):viewport?.width||innerWidth;
- const vh=standalone?Math.max(document.documentElement.clientHeight,innerHeight):viewport?.height||innerHeight;
- // Preserve the authored 9:16 geometry. Tall phones cannot show the complete
- // canvas edge-to-edge without either cropping or distortion, so keep uniform
- // scaling and anchor the canvas to the top of the visual viewport instead of
- // stretching it or vertically centering it between two letterbox bands.
- const scale=Math.min(vw/W,vh/H),displayW=W*scale,displayH=H*scale;
- const tallPhone=vw<=600&&vh/vw>1.7;
- if(tallPhone){
+ const vw=viewport?.width||innerWidth,vh=viewport?.height||innerHeight;
+ // 720 is the fixed logical width; 1280 is the minimum logical height.
+ // Tall portrait screens gain layout space instead of stretching the UI.
+ const fluidPortrait=vw<=600&&vh/vw>=H/W;
+ let displayW,displayH;
+ if(fluidPortrait){
+  displayW=vw;displayH=vh;VIEW_H=Math.max(H,W*vh/vw);
   stage.style.position='fixed';
-  const offsetX=standalone?0:viewport?.offsetLeft||0,offsetY=standalone?0:viewport?.offsetTop||0;
-  stage.style.left=(offsetX+(vw-displayW)/2)+'px';stage.style.top=offsetY+'px';
+  stage.style.left=(viewport?.offsetLeft||0)+'px';stage.style.top=(viewport?.offsetTop||0)+'px';
  }else{
+  const scale=Math.min(vw/W,vh/H);displayW=W*scale;displayH=H*scale;VIEW_H=H;
   stage.style.position='relative';stage.style.left='auto';stage.style.top='auto';
  }
  stage.style.width=displayW+'px';stage.style.height=displayH+'px';
@@ -282,15 +279,15 @@ function list(top,bottom,rows,rowH,draw){
  if(max){const h=Math.max(38,(bottom-top)**2/(rows.length*rowH));rect(713,top+S.scroll/max*(bottom-top-h),3,h,isDark()?'#666':'#bcc3cc',2)}
 }
 function bottomMain(){
- const lobby=S.page==='HOME'||S.page==='CLUBS',top=lobby?1156:1167,height=lobby?124:113;
+ const lobby=S.page==='HOME'||S.page==='CLUBS',height=lobby?124:113,top=VIEW_H-height;
  rect(0,top,720,height,lobby?linear(0,top,0,height,'#1c1f24','#060709'):'#ffffff');line(0,top,720,top,lobby?'#393d44':'#e7e9ef');
  const items=[['Club','club','HOME'],['Live Event','trophy','EVENTS_HOME'],['Stage 1','spade',null],['Stage 2','spade',null],['Final Stage','trophy',null],['Casino','grid',null],['Me','person','ME']];
  items.forEach(([label,icon,page],i)=>{const x=i*720/7+720/14,on=S.page===page,c=lobby?(on?'#f3f4f6':'#707781'):(on?'#323c49':'#b1b8c2');
-  if(lobby&&i){const sx=i*720/7;line(sx-7,top+10,sx+7,1275,'#353a41',1)}
-  glyph(icon==='grid'?'menu':icon,x,lobby?1198:1202,lobby?29:25,on&&lobby?'#ef365d':c);text(label,x,lobby?1241:1239,lobby?14:13,c,'center',500,99);
+  if(lobby&&i){const sx=i*720/7;line(sx-7,top+10,sx+7,top+119,'#353a41',1)}
+  glyph(icon==='grid'?'menu':icon,x,top+(lobby?42:35),lobby?29:25,on&&lobby?'#ef365d':c);text(label,x,top+(lobby?85:72),lobby?14:13,c,'center',500,99);
   hit('main-nav-'+i,label,i*720/7,top,720/7,height,()=>page==='HOME'?go('HOME',{},true):page==='ME'?go('ME'):page==='EVENTS_HOME'?open('info',{title:'Live Event',body:'Live Event 不在這次俱樂部 Prototype 的範圍。'}):null,!page);
  });
- rect(271,1265,178,5,lobby?'#f1f3f5':'#222832',3);
+ rect(271,VIEW_H-15,178,5,lobby?'#f1f3f5':'#222832',3);
 }
 function home(){
  avatar(62,65,66);hit('profile','Player Profile',18,17,91,91,()=>go('PROFILE'));
@@ -533,7 +530,7 @@ function startTournament(r){
 }
 function field(label,x,y,w,value,type='text',placeholder=''){
  const scale=stage.clientWidth/W;
- Object.assign(entry.style,{display:'block',left:x/W*100+'%',top:y/H*100+'%',width:w/W*100+'%',height:65/H*100+'%',fontSize:Math.max(16,23*scale)+'px',color:isDark()?'#eee':'#202630',background:isDark()?'#26262a':'#fff',borderColor:isDark()?'#505058':'#cdd4df'});
+ Object.assign(entry.style,{display:'block',left:x/W*100+'%',top:y/VIEW_H*100+'%',width:w/W*100+'%',height:65/VIEW_H*100+'%',fontSize:Math.max(16,23*scale)+'px',color:isDark()?'#eee':'#202630',background:isDark()?'#26262a':'#fff',borderColor:isDark()?'#505058':'#cdd4df'});
  entry.type='text';entry.inputMode=type==='number'?'numeric':'text';entry.maxLength=S.modal?.max||32;entry.placeholder=placeholder;entry.setAttribute('aria-label',label);
  const stamp=S.modal?.type+'|'+S.modal?.title+'|'+S.stack.length;if(formStamp!==stamp){entry.value=value||'';formStamp=stamp}
 }
@@ -546,8 +543,8 @@ function handleSubmit(){
 entry.addEventListener('input',()=>{if(S.modal){S.modal.value=entry.value;S.modal.error='';invalidate()}});
 entry.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();handleSubmit()}if(e.key==='Escape'){e.preventDefault();back()}});
 function sheetFrame(title,height=530){
- const y=1280-height,q=reduced?1:Math.min(1,(performance.now()-S.entered)/180);
- rect(0,0,720,1280,'#0009');rect(0,y+(1-q)*40,720,height+40,isDark()?'#202024':'#fff',22);rect(315,y+13,90,5,isDark()?'#5b5b60':'#d3d6dd',3);
+ const y=VIEW_H-height,q=reduced?1:Math.min(1,(performance.now()-S.entered)/180);
+ rect(0,0,720,VIEW_H,'#0009');rect(0,y+(1-q)*40,720,height+40,isDark()?'#202024':'#fff',22);rect(315,y+13,90,5,isDark()?'#5b5b60':'#d3d6dd',3);
  text(title,360,y+62,27,P.light,'center',600);glyph('close',673,y+60,22,P.muted);hit('sheet-close','Close',639,y+29,69,69,back);return y;
 }
 function modal(){
@@ -587,7 +584,7 @@ function modal(){
  }
  if(['handDetail','tableHistory','confirmAllin','exitTable','tableSettings'].includes(m.type)){
   const y=m.type==='handDetail'?174:265,h=m.type==='handDetail'?954:755;
-  rect(0,0,720,1280,'#000a');rect(24,y,672,h,'#232327',14);text(m.title||({handDetail:'HAND DETAIL',tableHistory:'HAND HISTORY',exitTable:'EXIT TABLE',tableSettings:'SETTINGS',confirmAllin:'ALL IN'})[m.type],55,y+45,25,'#fff','left',600);glyph('close',663,y+44,22,'#aaa');hit('close-modal','Close',629,y+13,66,65,back);tableModal(m,24,y,672,h);return;
+  rect(0,0,720,VIEW_H,'#000a');rect(24,y,672,h,'#232327',14);text(m.title||({handDetail:'HAND DETAIL',tableHistory:'HAND HISTORY',exitTable:'EXIT TABLE',tableSettings:'SETTINGS',confirmAllin:'ALL IN'})[m.type],55,y+45,25,'#fff','left',600);glyph('close',663,y+44,22,'#aaa');hit('close-modal','Close',629,y+13,66,65,back);tableModal(m,24,y,672,h);return;
  }
  const h=m.type==='edit'?440:m.type==='register'?590:440,y=sheetFrame(m.title||({register:'REGISTER',unregister:'UNREGISTER',quitClub:'QUIT CLUB',clubCreated:'CLUB CREATED'})[m.type]||'CLUB',h);
  if(m.type==='edit'){
@@ -624,7 +621,7 @@ function syncControls(){
 }
 
 function render(now){
- raf=0;frameTime=now;ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);S.hits=[];S.viewport=null;palette();rect(0,0,W,H,P.bg);
+ raf=0;frameTime=now;const scale=canvas.width/W;ctx.setTransform(scale,0,0,scale,0,0);S.hits=[];S.viewport=null;palette();rect(0,0,W,VIEW_H,P.bg);
  if(S.page==='PLAY')tablePage();
  else if(S.page==='HOME'||S.page==='CLUBS')home();
  else if(S.page==='JOIN')joinPage();
@@ -651,7 +648,7 @@ function render(now){
  if((S.modal&&!reduced&&now-S.entered<190)||(S.toast&&now<S.toastUntil)||(!reduced&&now<visualUntil))invalidate();
 }
 
-function point(e){const r=canvas.getBoundingClientRect();return {x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height}}
+function point(e){const r=canvas.getBoundingClientRect();return {x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*VIEW_H/r.height}}
 function target(p){return [...S.hits].reverse().find(h=>!h.disabled&&p.x>=h.x&&p.x<=h.x+h.w&&p.y>=h.y&&p.y<=h.y+h.h)}
 function scrollArea(){return S.modal?null:S.viewport||null}
 let pointer=null;
