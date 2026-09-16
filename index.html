@@ -255,7 +255,7 @@ function closeAll(){S.modal=null;S.stack=[];formStamp='';entry.blur();transition
 function notify(t){S.toast=t;S.toastUntil=performance.now()+2400;announce.textContent=t;invalidate()}
 function enterClub(id){S.club=id;S.tab='ALL';S.onlyOpen=false;S.onlyRunning=false;go('CLUB');}
 function roomRoute(club=null){if(club){enterClub(club)}else go('HOME',{},true)}
-function isDark(){return ['CLUB','TABLES','EVENTS','DETAIL','TOURNAMENT','CREATE_GAME','CREATE_CASH','CREATE_TOURNAMENT','MEMBERS','MANAGEMENT','MEMBER','STATS','HISTORY','PLAY'].includes(S.page)}
+function isDark(){return ['HOME','CLUBS','CLUB','TABLES','EVENTS','DETAIL','TOURNAMENT','CREATE_GAME','CREATE_CASH','CREATE_TOURNAMENT','MEMBERS','MANAGEMENT','MEMBER','STATS','HISTORY','PLAY'].includes(S.page)}
 function palette(){
  const dark=isDark();Object.assign(P,dark?{bg:'#080808',panel:'#222224',light:'#eeeeef',text:'#ceced2',muted:'#858589',line:'#333336',gold:'#ed3237',teal:'#9dda2e'}:
  {bg:'#ffffff',panel:'#f5f6f8',light:'#1d252f',text:'#454d57',muted:'#939ba5',line:'#e7e9ee',gold:'#0bb46b',teal:'#0bb46b'});
@@ -268,7 +268,8 @@ function appHeader(title,{right=null,fn=null,backward=true}={}){
 }
 function primary(id,label,fn,y=1168,disabled=false){button(id,label,28,y,664,72,fn,{primary:true,disabled})}
 function avatar(x,y,size=66,label=user.name){
- rect(x-size/2,y-size/2,size,size,'#e8edf2',size*.24);text(label.slice(0,1).toUpperCase(),x,y+1,size*.43,'#415168','center',700);
+ const dark=isDark();rect(x-size/2,y-size/2,size,size,dark?'#20242b':'#e8edf2',size*.24);border(x-size/2,y-size/2,size,size,dark?'#424851':'#e8edf2',size*.24);
+ text(label.slice(0,1).toUpperCase(),x,y+1,size*.43,dark?'#f2f4f7':'#415168','center',700);
 }
 function clubArtwork(c,x,y,w,h){
  rect(x,y,w,h,linear(x,y,w,h,c.color||'#233047','#090d12'),12);
@@ -288,49 +289,50 @@ function list(top,bottom,rows,rowH,draw){
  if(max){const h=Math.max(38,(bottom-top)**2/(rows.length*rowH));rect(713,top+S.scroll/max*(bottom-top-h),3,h,isDark()?'#666':'#bcc3cc',2)}
 }
 function bottomMain(){
- rect(0,1167,720,113,'#ffffff');line(0,1167,720,1167,'#e7e9ef');
+ const lobby=S.page==='HOME'||S.page==='CLUBS',top=lobby?1156:1167,height=lobby?124:113;
+ rect(0,top,720,height,lobby?linear(0,top,0,height,'#1c1f24','#060709'):'#ffffff');line(0,top,720,top,lobby?'#393d44':'#e7e9ef');
  const items=[['Club','club','HOME'],['Live Event','trophy','EVENTS_HOME'],['Stage 1','spade',null],['Stage 2','spade',null],['Final Stage','trophy',null],['Casino','grid',null],['Me','person','ME']];
- items.forEach(([label,icon,page],i)=>{const x=i*720/7+720/14,on=S.page===page,c=on?'#323c49':'#b1b8c2';
-  glyph(icon==='grid'?'menu':icon,x,1202,25,c);text(label,x,1239,13,c,'center',500,99);
-  hit('main-nav-'+i,label,i*720/7,1175,720/7,94,()=>page==='HOME'?go('HOME',{},true):page==='ME'?go('ME'):page==='EVENTS_HOME'?open('info',{title:'Live Event',body:'Live Event 不在這次俱樂部 Prototype 的範圍。'}):null,!page);
+ items.forEach(([label,icon,page],i)=>{const x=i*720/7+720/14,on=S.page===page,c=lobby?(on?'#f3f4f6':'#707781'):(on?'#323c49':'#b1b8c2');
+  if(lobby&&i){const sx=i*720/7;line(sx-7,top+10,sx+7,1275,'#353a41',1)}
+  glyph(icon==='grid'?'menu':icon,x,lobby?1198:1202,lobby?29:25,on&&lobby?'#ef365d':c);text(label,x,lobby?1241:1239,lobby?14:13,c,'center',500,99);
+  hit('main-nav-'+i,label,i*720/7,top,720/7,height,()=>page==='HOME'?go('HOME',{},true):page==='ME'?go('ME'):page==='EVENTS_HOME'?open('info',{title:'Live Event',body:'Live Event 不在這次俱樂部 Prototype 的範圍。'}):null,!page);
  });
- rect(271,1265,178,5,'#222832',3);
+ rect(271,1265,178,5,lobby?'#f1f3f5':'#222832',3);
 }
 function home(){
  avatar(62,65,66);hit('profile','Player Profile',18,17,91,91,()=>go('PROFILE'));
- text(user.name,115,48,25,'#26303b','left',650,299);rect(115,75,152,23,'#f0f1f3',12);text('GET MEMBERSHIP',187,87,10,'#6d767f','center',600);circle(275,87,7,'#0bb46b');
- border(518,37,174,40,'#e8eaf0',20);circle(542,57,12,'#ffd867');text('L',542,57,14,'#aa701a','center',700);text('0',672,58,18,'#c89230','right');
- rect(28,151,664,68,'#fff',15);border(28,151,664,68,'#dce0e8',15);
- glyph('search',59,185,21,'#8191a7');text('SEARCH CLUB',95,186,20,'#8191a7');
+ text(user.name,115,48,25,'#f4f5f7','left',650,299);rect(115,75,152,23,'#191c20',12);text('GET MEMBERSHIP',187,87,10,'#9aa1ac','center',600);circle(275,87,7,'#0bb46b');
+ rect(518,37,174,40,'#16181c',20);border(518,37,174,40,'#363a41',20);circle(542,57,12,'#f2b62f');text('L',542,57,14,'#60470f','center',700);text('0',672,58,18,'#f2b62f','right');
+ rect(28,151,664,68,'#17191d',15);border(28,151,664,68,'#34383f',15);
+ glyph('search',59,185,21,'#a4abb6');text('SEARCH CLUB',95,186,20,'#a4abb6');
  hit('search-club','Search Club',28,151,664,68,()=>go('JOIN',{value:''}));
  // ClubGG club cards form a horizontal carousel, not a vertical game-mode catalog.
- const cards=[...myClubs(),{id:'create',name:'Create Club'}],cw=424,gap=27;
+ const cards=[...myClubs(),{id:'create',name:'Create Club'}],cw=424,ch=523,gap=27;
  S.clubSlide=Math.max(0,Math.min(cards.length-1,S.clubSlide));
- ctx.save();ctx.beginPath();ctx.rect(0,256,720,596);ctx.clip();
+ ctx.save();ctx.beginPath();ctx.rect(0,245,720,690);ctx.clip();
  cards.forEach((c,i)=>{
-  const x=148+(i-S.clubSlide)*(cw+gap),y=286;if(x>720||x+cw<0)return;
-  ctx.save();ctx.shadowColor='#12223819';ctx.shadowBlur=18;ctx.shadowOffsetY=8;rect(x,y,cw,531,'#fff',32);ctx.restore();border(x,y,cw,531,'#eef0f4',32);
+  const x=148+(i-S.clubSlide)*(cw+gap),y=354;if(x>720||x+cw<0)return;
+  ctx.save();ctx.shadowColor='#000b';ctx.shadowBlur=25;ctx.shadowOffsetY=12;rect(x,y,cw,ch,linear(x,y,cw,ch,'#25282e','#141619'),32);ctx.restore();border(x,y,cw,ch,'#3c4047',32);
   if(c.id==='create'){
-   clubArtwork({name:'CLUB',color:'#481426'},x+27,y+25,cw-54,322);text('Create a club and run your own poker club',x+cw/2,y+384,15,'#9299a2','center',400,cw-36);
-   button('create-club','CREATE CLUB',x+26,y+430,cw-52,65,()=>go('CREATE_CLUB',{name:''}),{primary:true});
+   clubArtwork({name:'CLUB',color:'#481426'},x+27,y+25,cw-54,313);text('Create a club and run your own poker club',x+cw/2,y+374,15,'#9299a2','center',400,cw-36);
+   button('create-club','CREATE CLUB',x+26,y+426,cw-52,64,()=>go('CREATE_CLUB',{name:''}),{primary:true});
   }else{
-   clubArtwork(c,x+27,y+25,cw-54,322);
-   text(c.name,x+cw/2,y+377,28,'#222b35','center',700,cw-36);text('(ID : '+c.id+')',x+cw/2,y+411,17,'#929ba7','center');
-   rect(x+27,y+454,169,37,'#f1f3f7',18);rect(x+211,y+454,185,37,'#f1f3f7',18);
-   glyph('group',x+47,y+473,19,'#9aa5b5');text(c.members,x+175,y+473,17,'#56606b','right');
-   glyph('spade',x+235,y+473,18,'#9aa5b5');text(allRooms().filter(r=>r.club===c.id).length,x+369,y+473,17,'#56606b','right');
-   hit('club-'+c.id,'進入 '+c.name,Math.max(0,x),y,Math.min(720,x+cw)-Math.max(0,x),531,()=>enterClub(c.id));
+   clubArtwork(c,x+27,y+25,cw-54,313);
+   text(c.name,x+cw/2,y+369,28,'#f5f6f8','center',700,cw-36);text('ID · '+c.id,x+cw/2,y+402,17,'#9299a5','center');
+   rect(x+27,y+447,169,37,'#090a0c',18);border(x+27,y+447,169,37,'#32363c',18);rect(x+211,y+447,185,37,'#090a0c',18);border(x+211,y+447,185,37,'#32363c',18);
+   glyph('group',x+47,y+466,19,'#858d99');text(c.members,x+175,y+466,17,'#e8ebef','right');
+   glyph('spade',x+235,y+466,18,'#858d99');text(allRooms().filter(r=>r.club===c.id).length,x+369,y+466,17,'#e8ebef','right');
+   hit('club-'+c.id,'進入 '+c.name,Math.max(0,x),y,Math.min(720,x+cw)-Math.max(0,x),ch,()=>enterClub(c.id));
   }
  });ctx.restore();
- cards.forEach((c,i)=>rect(360-(cards.length*20)/2+i*20,843,i===S.clubSlide?14:6,6,i===S.clubSlide?'#7e9ac0':'#dce1e8',3));
- hit('clubs-prev','上一個俱樂部',0,278,80,560,()=>{S.clubSlide=Math.max(0,S.clubSlide-1);invalidate()},S.clubSlide===0);
- hit('clubs-next','下一個俱樂部',640,278,80,560,()=>{S.clubSlide=Math.min(cards.length-1,S.clubSlide+1);invalidate()},S.clubSlide===cards.length-1);
+ cards.forEach((c,i)=>rect(360-(cards.length*20)/2+i*20,895,i===S.clubSlide?14:6,6,i===S.clubSlide?'#e9edf3':'#444952',3));
+ hit('clubs-prev','上一個俱樂部',0,320,80,600,()=>{S.clubSlide=Math.max(0,S.clubSlide-1);invalidate()},S.clubSlide===0);
+ hit('clubs-next','下一個俱樂部',640,320,80,600,()=>{S.clubSlide=Math.min(cards.length-1,S.clubSlide+1);invalidate()},S.clubSlide===cards.length-1);
  // Membership banner stays in its reference slot; it does not introduce a new flow.
- rect(28,967,664,164,linear(28,967,664,164,'#21121e','#51152a'),20);
- if(clubIcon.complete&&clubIcon.naturalWidth)ctx.drawImage(clubIcon,48,989,117,117);
- text('PLAY WITH FRIENDS',191,1026,30,'#fff','left',750,469);
- text('Club Games',191,1070,24,'#d4c8ce','left',500);
- text('H5 PROTOTYPE',675,1149,12,'#abb2bd','right');
+ rect(28,947,664,162,linear(28,947,664,162,'#f1f2f4','#cfd3d9'),20);border(28,947,664,162,'#ffffffb8',20);
+ if(clubIcon.complete&&clubIcon.naturalWidth)ctx.drawImage(clubIcon,48,970,116,116);
+ text('PLAY WITH FRIENDS',191,1007,30,'#111317','left',750,469);
+ text('Club Games',191,1051,24,'#555d69','left',500);glyph('arrow',659,1028,23,'#30353d');
  bottomMain();
 }
 function joinPage(){
@@ -1261,7 +1263,7 @@ function scrollArea(){return S.modal?null:S.viewport||null}
 let pointer=null;
 canvas.addEventListener('pointerdown',e=>{
  if(pointer)return;const p=point(e),area=scrollArea();pointer={id:e.pointerId,start:p,last:p,drag:false,scroll:area&&p.y>=area[0]&&p.y<=area[1]};
- S.pressed=target(p)?.id||null;pointer.carousel=S.page==='HOME'&&!S.modal&&p.y>256&&p.y<856;S.keyboard=false;canvas.setPointerCapture(e.pointerId);animate(350);
+ S.pressed=target(p)?.id||null;pointer.carousel=(S.page==='HOME'||S.page==='CLUBS')&&!S.modal&&p.y>300&&p.y<930;S.keyboard=false;canvas.setPointerCapture(e.pointerId);animate(350);
  if(S.pressed?.startsWith('squeeze-card-')){
   pointer.squeeze=Number(S.pressed.slice(-1));pointer.peekStart=tableSession.peek[pointer.squeeze];pointer.sounded=false;sound('peel');
  }
