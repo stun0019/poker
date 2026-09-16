@@ -88,10 +88,22 @@ let raf=0,signature='',formStamp='',audio=null;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function invalidate(){if(!raf&&!document.hidden)raf=requestAnimationFrame(render)}
 function resize(){
- const scale=Math.min((visualViewport?.width||innerWidth)/W,(visualViewport?.height||innerHeight)/H);
- stage.style.width=W*scale+'px';stage.style.height=H*scale+'px';
+ const viewport=visualViewport,vw=viewport?.width||innerWidth,vh=viewport?.height||innerHeight;
+ // Modern phones are considerably taller than the 9:16 design canvas. On
+ // those screens, fill the visual viewport instead of centering a short canvas
+ // with large letterbox bands. Desktop and 9:16 previews keep exact scaling.
+ const mobileFill=vw<=600&&vh/vw>1.7;
+ let displayW,displayH;
+ if(mobileFill){
+  displayW=vw;displayH=vh;stage.style.position='fixed';
+  stage.style.left=(viewport?.offsetLeft||0)+'px';stage.style.top=(viewport?.offsetTop||0)+'px';
+ }else{
+  const scale=Math.min(vw/W,vh/H);displayW=W*scale;displayH=H*scale;
+  stage.style.position='relative';stage.style.left='auto';stage.style.top='auto';
+ }
+ stage.style.width=displayW+'px';stage.style.height=displayH+'px';
  const d=Math.min(devicePixelRatio||1,3);
- canvas.width=Math.round(W*scale*d);canvas.height=Math.round(H*scale*d);invalidate();
+ canvas.width=Math.round(displayW*d);canvas.height=Math.round(displayH*d);invalidate();
 }
 addEventListener('resize',resize);visualViewport?.addEventListener('resize',resize);
 function path(x,y,w,h,r=12){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
