@@ -8,6 +8,8 @@
 const W=720,H=1280,TAU=Math.PI*2;
 const canvas=document.getElementById('game'),ctx=canvas.getContext('2d',{alpha:false});
 const stage=document.getElementById('stage'),entry=document.getElementById('entry'),controls=document.getElementById('controls'),announce=document.getElementById('announce');
+const standalone=matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches||navigator.standalone===true;
+document.documentElement.classList.toggle('ios-standalone',standalone);
 const P={bg:'#ffffff',panel:'#f5f6f8',gold:'#00ad64',light:'#17202b',text:'#303841',muted:'#89929d',line:'#e5e7eb',teal:'#08b568'};
 const MODES=[{id:'NLH',name:"HOLD'EM",zh:'德州撲克',color:'#c98324'},{id:'PLO',name:'OMAHA',zh:'奧馬哈',color:'#c98324'},{id:'6+',name:'SHORT DECK',zh:'短牌',color:'#c98324'}];
 const KEY='clubgg-h5-prototype-v1',LEGACY_KEY='river-poker-client-v1';
@@ -64,7 +66,9 @@ let raf=0,signature='',formStamp='',audio=null;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function invalidate(){if(!raf&&!document.hidden)raf=requestAnimationFrame(render)}
 function resize(){
- const viewport=visualViewport,vw=viewport?.width||innerWidth,vh=viewport?.height||innerHeight;
+ const viewport=visualViewport;
+ const vw=standalone?Math.max(document.documentElement.clientWidth,innerWidth):viewport?.width||innerWidth;
+ const vh=standalone?Math.max(document.documentElement.clientHeight,innerHeight):viewport?.height||innerHeight;
  // Preserve the authored 9:16 geometry. Tall phones cannot show the complete
  // canvas edge-to-edge without either cropping or distortion, so keep uniform
  // scaling and anchor the canvas to the top of the visual viewport instead of
@@ -73,7 +77,8 @@ function resize(){
  const tallPhone=vw<=600&&vh/vw>1.7;
  if(tallPhone){
   stage.style.position='fixed';
-  stage.style.left=(viewport?.offsetLeft+(vw-displayW)/2||0)+'px';stage.style.top=(viewport?.offsetTop||0)+'px';
+  const offsetX=standalone?0:viewport?.offsetLeft||0,offsetY=standalone?0:viewport?.offsetTop||0;
+  stage.style.left=(offsetX+(vw-displayW)/2)+'px';stage.style.top=offsetY+'px';
  }else{
   stage.style.position='relative';stage.style.left='auto';stage.style.top='auto';
  }
