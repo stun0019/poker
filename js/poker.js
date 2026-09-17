@@ -135,6 +135,8 @@ function toggleSound(){user.sound=!user.sound;save();if(user.sound)sound('turn')
 function tableAmount(n){return money(n)}
 
 const SEATS=[[143,935],[105,704],[105,338],[360,187],[615,338],[615,704]];
+const tableExtra=()=>Math.max(0,VIEW_H-H);
+function seatPosition(i){const [x,y]=SEATS[i],spread=[1,.57,.24,.12,.24,.57][i];return [x,y+tableExtra()*spread]}
 const SEAT_COLORS=['#d7bc80','#709d98','#839cbd','#ac899e','#8ea276','#bd9f78'];
 const streetName=n=>['翻牌前','翻牌','轉牌','河牌'][n];
 const money=n=>Math.floor(n).toLocaleString();
@@ -226,7 +228,7 @@ function performTableAction(type,to){
  if(!g.act(i,type,to))return false;
  const paid=before-g.players[i].stack;
  if(i===0&&g.street===0&&t.handStats){if(paid>0)t.handStats.vpip=true;if(type==='raise')t.handStats.pfr=true}
- if(paid>0)t.effects.push({at:performance.now(),from:SEATS[i],amount:paid});
+ if(paid>0)t.effects.push({at:performance.now(),from:seatPosition(i),amount:paid});
  sound(type==='fold'?'fold':paid===0?'check':g.players[i].stack===0?'allin':'chips');
  return true;
 }
@@ -288,12 +290,15 @@ function oval(x,y,rx,ry,fill,stroke,width=1){
 }
 
 function tableSurface(){
- rect(0,0,W,H,'#15191d');
- const z=ctx.createRadialGradient(360,650,130,360,650,750);z.addColorStop(0,'#34414a');z.addColorStop(1,'#101318');rect(0,70,720,1160,z);
- ctx.save();ctx.shadowColor='#000';ctx.shadowBlur=23;ctx.shadowOffsetY=10;rect(35,150,650,913,'#111419',294);ctx.restore();
- border(42,157,636,898,'#464b50',288,6);
- rect(59,174,602,865,linear(0,174,0,865,'#193649','#21465f'),277);border(76,190,568,832,'#62809733',267,1);
- text('ClubGG',360,361,40,'#dae8f126','center',750);rect(323,384,74,28,'#a4c9e922',10);text('NLH',360,399,20,'#b1c9dd66','center',700);
+ rect(0,0,W,VIEW_H,'#10151b');
+ const top=151,bottom=VIEW_H-218,center=(top+bottom)/2,ry=(bottom-top)/2;
+ const surround=ctx.createLinearGradient(0,80,0,VIEW_H);surround.addColorStop(0,'#1a2229');surround.addColorStop(.55,'#10171b');surround.addColorStop(1,'#0a0d10');rect(0,76,W,VIEW_H-76,surround);
+ ctx.save();ctx.shadowColor='#000b';ctx.shadowBlur=28;ctx.shadowOffsetY=12;oval(360,center,405,ry+21,'#090c10');ctx.restore();
+ oval(360,center,399,ry+12,'#22282a','#4b5352',7);
+ oval(360,center,386,ry,'#111b21','#738187',2);
+ const felt=ctx.createRadialGradient(360,center-60,80,360,center,690);felt.addColorStop(0,'#244b63');felt.addColorStop(.6,'#19394d');felt.addColorStop(1,'#102b3a');oval(360,center,374,ry-12,felt,'#527083',2);
+ ctx.save();ctx.beginPath();ctx.ellipse(360,center,356,ry-31,0,0,TAU);ctx.setLineDash([5,10]);ctx.strokeStyle='#8ab0bd24';ctx.lineWidth=2;ctx.stroke();ctx.restore();
+ const brandY=350+tableExtra()*.16;text('ClubGG',360,brandY,37,'#dae8f11c','center',750);rect(324,brandY+24,72,26,'#a4c9e918',10);text('NLH',360,brandY+37,18,'#b1c9dd61','center',700);
 }
 
 function liveCard(card,x,y,w=78,h=108,hidden=false,highlight=false,angle=0){
@@ -355,41 +360,41 @@ function moneyChips(x,y,amount,color='#64a99d',scale=1){
  }ctx.restore();
 }
 function seatView(p,i){
- const t=tableSession,g=t.game,[x,y]=SEATS[i],hero=i===0,active=g.actor===i&&g.state==='betting',win=g.state==='done'&&g.winners.includes(i);
+ const t=tableSession,g=t.game,[x,y]=seatPosition(i),hero=i===0,active=g.actor===i&&g.state==='betting',win=g.state==='done'&&g.winners.includes(i);
  const ready=reduced||performance.now()-t.dealtAt>1100,show=g.showdown&&!p.folded;
- const width=hero?224:154,bx=x-width/2,by=hero?968:y+20;
+ const width=hero?210:138,bx=x-width/2,by=hero?968+tableExtra():y+20;
  ctx.save();if(p.folded&&!hero)ctx.globalAlpha=.43;
  if(ready&&p.cards.length){
-  if(hero)p.cards.forEach((c,j)=>liveCard(c,x+(j-.5)*82,901,84,116,!t.revealed[j],win&&(p.result?.cards.includes(c)??true),(j-.5)*.055));
-  else p.cards.forEach((c,j)=>liveCard(c,x+(j-.5)*(show?49:31),y-15,show?46:33,show?64:45,!show,win&&p.result?.cards.includes(c),(j-.5)*.09));
+  if(hero)p.cards.forEach((c,j)=>liveCard(c,x+(j-.5)*82,901+tableExtra(),84,116,!t.revealed[j],win&&(p.result?.cards.includes(c)??true),(j-.5)*.055));
+  else p.cards.forEach((c,j)=>liveCard(c,x+(j-.5)*(show?43:27),y-14,show?42:30,show?60:42,!show,win&&p.result?.cards.includes(c),(j-.5)*.09));
  }
  ctx.save();if(active||win){ctx.shadowColor=win?'#e9b84b':'#e4d07b';ctx.shadowBlur=active?15:20}
- rect(bx,by,width,hero?62:58,'#0c1113',6);ctx.restore();
- border(bx,by,width,hero?62:58,active?'#e4c76e':win?'#d8b65a':'#5b6767',6,active||win?2:1);
- rect(bx+1,by+1,width-2,27,'#272d2e',5);
- text(p.name+(hero?' · 你':''),x,by+15,hero?19:17,'#f1f3ef','center',650,width-17);
- text(user.settings.bb?(p.stack/g.bb).toFixed(1)+' BB':money(p.stack),x,by+(hero?46:43),hero?27:22,win?'#f2d276':'#8ddac1','center',750,width-17);
+ rect(bx,by,width,hero?60:52,'#0c1117e8',7);ctx.restore();
+ border(bx,by,width,hero?60:52,active?'#e4c76e':win?'#d8b65a':'#65777b',7,active||win?2:1);
+ rect(bx+1,by+1,width-2,23,'#242d34',5);
+ text(p.name+(hero?' · 你':''),x,by+13,hero?18:15,'#f1f3ef','center',650,width-13);
+ text(user.settings.bb?(p.stack/g.bb).toFixed(1)+' BB':money(p.stack),x,by+(hero?43:39),hero?25:20,win?'#f2d276':'#8ddac1','center',750,width-13);
  if(active){
   const f=hero?Math.max(0,t.clockLeft/Math.max(1,t.clockTotal)):Math.max(0,(t.botDue-performance.now())/Math.max(1,t.botDue-t.botStart));
-  rect(bx+8,by+(hero?58:54),width-16,3,'#343d36',2);
-  rect(bx+8,by+(hero?58:54),(width-16)*f,3,hero&&t.clockLeft<6000?'#f0715f':'#d8b45e',2);
+  rect(bx+8,by+(hero?56:49),width-16,3,'#343d36',2);
+  rect(bx+8,by+(hero?56:49),(width-16)*f,3,hero&&t.clockLeft<6000?'#f0715f':'#d8b45e',2);
  }
  if(!hero&&p.label){
   const isRaise=p.label.startsWith('加注')||p.label.startsWith('ALL');
   const c=win?'#caa24e':isRaise?'#b43a39':p.folded?'#353c3c':'#255b4c';
-  rect(x-71,y+87,142,25,c,4);text(p.label,x,y+100,14,win?'#18180f':'#e1e7df','center',600,136);
+  rect(x-64,y+77,128,24,c,4);text(p.label,x,y+89,13,win?'#18180f':'#e1e7df','center',600,120);
  }
- if(hero&&p.folded){rect(x-80,882,160,41,'#171d1def',5);text('已棄牌',x,903,23,'#b8c5c0','center',650)}
+ if(hero&&p.folded){rect(x-80,882+tableExtra(),160,41,'#171d1def',5);text('已棄牌',x,903+tableExtra(),23,'#b8c5c0','center',650)}
  if(win){
   ctx.save();ctx.shadowColor='#f1b95366';ctx.shadowBlur=12;
-  text('WIN',x,hero?831:y-67,hero?32:27,'#f7d17c','center',850);ctx.restore();
+  text('WIN',x,hero?831+tableExtra():y-60,hero?32:27,'#f7d17c','center',850);ctx.restore();
  }
  if(g.dealer===i){
   const dx=hero?x+137:x+(i===4||i===5?-99:99),dy=by+40;
   circle(dx,dy,12,'#eed692','#806840');text('D',dx,dy+1,14,'#22201a','center',800);
  }
  if(p.bet>0&&g.state!=='done'){
-  const bx=hero?360:i===3?360:i<3?233:487,by=hero?797:i===3?327:i===2||i===4?438:718;
+  const bx=hero?360:i===3?360:i<3?233:487,by=(hero?797:i===3?327:i===2||i===4?438:718)+tableExtra()*[.83,.58,.27,.17,.27,.58][i];
   moneyChips(bx-23,by,p.bet,i%2?'#74bb94':'#cb7b61',.95);
   text(money(p.bet),bx+1,by-5,18,'#eef1d9','left',650);
  }
@@ -399,44 +404,45 @@ function setRaise(v){const t=tableSession,l=t.game.legal(0);if(!l||!l.canRaise)r
 
 
 function drawActions(){
- const t=tableSession,g=t.game,p=g.players[0];
+ const t=tableSession,g=t.game,p=g.players[0],extra=tableExtra();
+ rect(0,1080+extra,720,200,linear(0,1080+extra,0,200,'#101821ef','#080c10'));
+ line(0,1080+extra,720,1080+extra,'#9bb7bb24');
  if(g.state==='done'){
-  rect(0,1070,720,210,'#16181cf5');
-  if(t.finished){text('Tournament Finished',360,1104,28,'#eee','center',600);text('Rank '+t.rank+' · Prize '+money(t.prize),360,1149,24,'#eed394','center');button('tournament-finish','BACK TO CLUB',28,1190,664,67,leaveTable,{primary:true});return}
-  const net=p.stack-p.startStack;text('Result '+(net>=0?'+':'')+money(net),28,1111,30,net>=0?'#daca76':'#ddaba4','left',650);
-  if(!t.tournament)button('topup-table','TOP UP',526,1087,166,51,()=>open('topup',{buyBB:t.room.maxBB||200}),{disabled:p.stack>=g.bb*(t.room.maxBB||200)});
-  button('next-hand',p.stack?'NEXT HAND':'TOP UP',28,1190,664,71,startTableHand,{primary:true});return;
+  if(t.finished){text('Tournament Finished',360,1104+extra,28,'#eee','center',600);text('Rank '+t.rank+' · Prize '+money(t.prize),360,1149+extra,24,'#eed394','center');button('tournament-finish','BACK TO CLUB',28,1190+extra,664,67,leaveTable,{primary:true});return}
+  const net=p.stack-p.startStack;text('Result '+(net>=0?'+':'')+money(net),28,1111+extra,30,net>=0?'#daca76':'#ddaba4','left',650);
+  if(!t.tournament)button('topup-table','TOP UP',526,1087+extra,166,51,()=>open('topup',{buyBB:t.room.maxBB||200}),{disabled:p.stack>=g.bb*(t.room.maxBB||200)});
+  button('next-hand',p.stack?'NEXT HAND':'TOP UP',28,1190+extra,664,71,startTableHand,{primary:true});return;
  }
  const l=g.legal(0),ready=elapsedReady(t);
  if(!l||!ready){
-  rect(0,1090,720,190,'#14171bef');text(!ready?'Dealing…':p.folded?'Folded':g.state==='street'?'Dealing board':(g.players[g.actor]?.name||'Player')+' is thinking',360,1129,22,'#aebac4','center');
-  button('table-menu-bottom','MENU',28,1190,219,70,()=>open('tableMenu'));
-  button('preaction',t.preaction?'Check / Fold · ON':'Check / Fold',265,1190,427,70,()=>{t.preaction=!t.preaction;invalidate()},{primary:t.preaction,disabled:p.folded||!p.stack||!ready});return;
+  text(!ready?'Dealing…':p.folded?'Folded':g.state==='street'?'Dealing board':(g.players[g.actor]?.name||'Player')+' is thinking',360,1129+extra,22,'#aebac4','center');
+  button('table-menu-bottom','MENU',28,1190+extra,219,70,()=>open('tableMenu'));
+  button('preaction',t.preaction?'Check / Fold · ON':'Check / Fold',265,1190+extra,427,70,()=>{t.preaction=!t.preaction;invalidate()},{primary:t.preaction,disabled:p.folded||!p.stack||!ready});return;
  }
  const min=Math.min(l.min,l.max);t.raiseTo=Math.max(min,Math.min(l.max,t.raiseTo));
  const percentages=user.settings.bet||[.33,.5,.75,1];
  percentages.toReversed().forEach((pct,i)=>{
   const amount=Math.min(l.max,Math.max(min,g.current+Math.max(g.lastRaise,Math.floor((g.pot+l.call)*pct))));
-  const x=506,y=941+i*80,id='raise-preset-'+i;
+  const x=506,y=941+extra+i*80,id='raise-preset-'+i;
   rect(x,y,187,74,'#232529',5);border(x,y,187,74,'#515358',5);
   text(pct===1?'Pot':Math.round(pct*100)+'%',x+14,y+17,15,'#b5b6b9','left',600);
   text('Raise to',x+172,y+17,14,'#b5b6b9','right');
   text(money(amount),x+93,y+49,27,l.canRaise?'#f0d277':'#696b70','center',700);
   hit(id,'Raise to '+amount+' ('+Math.round(pct*100)+'%)',x,y,187,74,()=>requestHeroAction('raise',amount),!l.canRaise);
  });
- button('bet-keypad','',273,1107,89,65,()=>open('betKeypad',{value:String(t.raiseTo)}),{icon:'menu',disabled:!l.canRaise});
- button('bet-hold','',378,1107,89,65,()=>requestHeroAction('raise',min),{icon:'plus',disabled:!l.canRaise});
- button('act-fold','Fold',28,1192,214,69,()=>heroAction('fold'));
- button('act-call',l.call?'Call '+money(l.call):'Check',257,1192,227,69,()=>requestHeroAction('call'));
+ button('bet-keypad','',273,1107+extra,89,65,()=>open('betKeypad',{value:String(t.raiseTo)}),{icon:'menu',disabled:!l.canRaise});
+ button('bet-hold','',378,1107+extra,89,65,()=>requestHeroAction('raise',min),{icon:'plus',disabled:!l.canRaise});
+ button('act-fold','Fold',28,1192+extra,214,69,()=>heroAction('fold'));
+ button('act-call',l.call?'Call '+money(l.call):'Check',257,1192+extra,227,69,()=>requestHeroAction('call'));
  if(pointer?.betHold){
-  const v=t.raiseTo,x=340,y=652;rect(x,y,140,432,'#171a20f5',10);border(x,y,140,432,'#6c7278',10);
+  const v=t.raiseTo,x=340,y=652+extra*.65;rect(x,y,140,432,'#171a20f5',10);border(x,y,140,432,'#6c7278',10);
   rect(x+66,y+70,8,309,'#45494d',4);const f=l.max===min?0:(v-min)/(l.max-min);rect(x+66,y+70+(1-f)*309,8,f*309,'#c6a755',4);circle(x+70,y+70+(1-f)*309,15,'#e4c879');
   text(pointer.betCancelled?'Cancel':money(v),x+70,y+34,23,'#eed48c','center',700);
  }
 }
 
 function tablePage(){
- const t=tableSession;if(!t)return;const g=t.game;tableSurface();
+ const t=tableSession;if(!t)return;const g=t.game,extra=tableExtra(),mid=extra*.39;tableSurface();
  rect(0,0,W,92,linear(0,0,0,92,'#0c1011f5','#111617ce'));line(0,91,W,91,'#424a4355');
  button('exit-table','',24,24,51,49,tableBack,{icon:'back'});hit('exit-table-touch','返回',16,10,68,80,tableBack);
  text(t.room.name,93,40,23,P.light,'left',650,340);small('NLH  ·  '+g.sb+' / '+g.bb+'  ·  6 MAX',94,69);
@@ -444,47 +450,48 @@ function tablePage(){
  button('table-history','紀錄',548,26,70,48,()=>open('tableHistory'));
  button('table-settings','',633,26,63,48,()=>open('tableMenu'),{icon:'menu'});
  small('HAND #'+String(g.hand).padStart(3,'0'),30,116,'#8b9f9f');small(t.tournament?'LEVEL '+t.level:'CLUB '+t.room.club,690,116,'#8b9f9f','right');
- const potY=450;small(g.state==='done'?'本手底池':'底池',360,potY-28,'#b1cbbb','center');
+ const potY=450+mid;rect(287,potY-44,146,74,'#0c1e29a8',12);border(287,potY-44,146,74,'#8fb0b93a',12);
+ small(g.state==='done'?'本手底池':'底池',360,potY-27,'#b1cbbb','center');
  text(money(g.pot),360,potY+7,29,'#ecf0d9','center',750);if(g.pot)moneyChips(307,potY+13,g.pot,'#c5b179',.8);
  const best=g.board.length>=3?bestHand([...g.players[0].cards,...g.board]):null;
  for(let i=0;i<5;i++){
-  const x=188+i*86,y=564;
+  const x=188+i*86,y=564+mid;
   if(i<g.board.length){
    const progress=reduced?1:Math.min(1,(performance.now()-t.revealAt-(i-(t.oldBoard||0))*90)/300);
    const fresh=t.revealAt&&i>=(t.oldBoard||0)&&progress<1;
    ctx.save();if(fresh){ctx.translate(x,y);ctx.scale(Math.max(.04,Math.abs(progress*2-1)),1);liveCard(g.board[i],0,0,80,112,progress<.5);ctx.restore()}
    else {ctx.restore();liveCard(g.board[i],x,y,80,112,false,g.state==='done'&&g.winners.includes(0)&&best?.cards.includes(g.board[i]))}
-  }else {border(x-40,y-56,80,112,'#9bbbb320',5)}
+  }
  }
- text(g.state==='done'?'本手結束':streetName(g.street),360,641,17,'#a9c8b8','center',650);
+ if(g.board.length)text(g.state==='done'?'本手結束':streetName(g.street),360,641+mid,17,'#a9c8b8','center',650);
  if(g.state==='done'){
   const names=g.winners.map(i=>g.players[i].name).join(' / ');
-  rect(205,676,310,103,'#092918c9',6);line(242,677,478,677,'#d1b77480');
-  text(names,360,708,23,'#f4d890','center',700,286);
-  text(g.showdown?g.players[g.winners[0]].result.name:'其他玩家棄牌',360,738,18,'#c1d9c5','center');
-  small(g.pots.filter(p=>!p.refund).length>1?'含邊池 · 詳情見手牌紀錄':'WINNER',360,764,'#a7bba6','center');
- }else if(best&&!g.players[0].folded&&t.revealed.every(Boolean))small('你的牌型 · '+best.name,360,790,'#b5d4bf','center');
+  rect(205,676+mid,310,103,'#092918c9',6);line(242,677+mid,478,677+mid,'#d1b77480');
+  text(names,360,708+mid,23,'#f4d890','center',700,286);
+  text(g.showdown?g.players[g.winners[0]].result.name:'其他玩家棄牌',360,738+mid,18,'#c1d9c5','center');
+  small(g.pots.filter(p=>!p.refund).length>1?'含邊池 · 詳情見手牌紀錄':'WINNER',360,764+mid,'#a7bba6','center');
+ }else if(best&&!g.players[0].folded&&t.revealed.every(Boolean))small('你的牌型 · '+best.name,360,790+extra*.68,'#b5d4bf','center');
  g.players.forEach(seatView);
  if(elapsedReady(t)&&!g.players[0].folded&&g.state!=='done'){
-  hit('peek-hole','咪牌查看手牌',48,839,190,122,openSqueeze);
+  hit('peek-hole','咪牌查看手牌',48,839+extra,190,122,openSqueeze);
   if(!t.revealed.every(Boolean)){
-   rect(66,910,158,35,'#081416dc',5);text('Squeeze',145,928,18,'#eddbac','center',650);
-   button('show-hole','SHOW',294,929,130,45,()=>{revealHole(0);revealHole(1)});
+   rect(66,910+extra,158,35,'#081416dc',5);text('Squeeze',145,928+extra,18,'#eddbac','center',650);
+   button('show-hole','SHOW',294,929+extra,130,45,()=>{revealHole(0);revealHole(1)});
   }
  }
  if(g.actor===0&&g.state==='betting'&&elapsedReady(t)){
-  const sec=Math.ceil(t.clockLeft/1000);text(String(sec).padStart(2,'0'),304,991,27,sec<=5?'#f48470':'#e3c881','center',750);
-  button('time-bank',t.bankUsed?'Used':'+15s',344,983,96,43,()=>{t.bankUsed=true;t.clockLeft+=15000;t.clockTotal+=15000;sound('turn')},{disabled:t.bankUsed});
+  const sec=Math.ceil(t.clockLeft/1000);text(String(sec).padStart(2,'0'),304,991+extra,27,sec<=5?'#f48470':'#e3c881','center',750);
+  button('time-bank',t.bankUsed?'Used':'+15s',344,983+extra,96,43,()=>{t.bankUsed=true;t.clockLeft+=15000;t.clockTotal+=15000;sound('turn')},{disabled:t.bankUsed});
  }
- if(!g.showdown&&g.state!=='done'){small('盲注 '+g.sb+' / '+g.bb+'   ·   6 MAX',360,708,'#c2d7b760','center');small('ClubGG  /  NLH',360,735,'#c2d7b745','center')}
+ if(!g.showdown&&g.state!=='done'){small('盲注 '+g.sb+' / '+g.bb+'   ·   6 MAX',360,708+mid,'#c2d7b760','center')}
  const elapsed=performance.now()-t.dealtAt;
  if(!reduced&&elapsed<1250){
-  for(let k=0;k<12;k++){const a=(elapsed-k*65)/290;if(a<0||a>1)continue;const [sx,sy]=SEATS[(g.dealer+1+k%6)%6],q=1-(1-a)**3;liveCard(0,360+(sx-360)*q,370+(sy-65-370)*q,26,36,true,false,(1-q)*.3)}
+  for(let k=0;k<12;k++){const a=(elapsed-k*65)/290;if(a<0||a>1)continue;const [sx,sy]=seatPosition((g.dealer+1+k%6)%6),q=1-(1-a)**3;liveCard(0,360+(sx-360)*q,370+(sy-65-370)*q,26,36,true,false,(1-q)*.3)}
  }
- t.effects=t.effects.filter(e=>performance.now()-e.at<650);t.effects.forEach(e=>{const f=Math.min(1,(performance.now()-e.at)/650),q=1-(1-f)**3;ctx.save();ctx.globalAlpha=1-f*.6;moneyChips(e.from[0]+(360-e.from[0])*q,e.from[1]+(482-e.from[1])*q,e.amount,'#d0b775',.9);ctx.restore()});
+ t.effects=t.effects.filter(e=>performance.now()-e.at<650);t.effects.forEach(e=>{const f=Math.min(1,(performance.now()-e.at)/650),q=1-(1-f)**3;ctx.save();ctx.globalAlpha=1-f*.6;moneyChips(e.from[0]+(360-e.from[0])*q,e.from[1]+(482+mid-e.from[1])*q,e.amount,'#d0b775',.9);ctx.restore()});
  if(!reduced&&g.state==='done'&&performance.now()-t.settledAt<1000){
   const q=Math.min(1,(performance.now()-t.settledAt)/1000);
-  g.winners.forEach(i=>{const [x,y]=SEATS[i];moneyChips(360+(x-360)*q,482+(y-482)*q,g.payouts[i],'#dac185',1)});invalidate();
+  g.winners.forEach(i=>{const [x,y]=seatPosition(i);moneyChips(360+(x-360)*q,482+mid+(y-482-mid)*q,g.payouts[i],'#dac185',1)});invalidate();
  }
  drawActions();
  if(!reduced&&(elapsed<1500||performance.now()-t.revealAt<650||t.effects.length))invalidate();
@@ -493,7 +500,7 @@ function tablePage(){
 function elapsedReady(t){return performance.now()-t.dealtAt>=(reduced?0:1300)}
 function squeezeModal(){
  const t=tableSession;if(!t){back();return}
- rect(0,0,720,1280,'#03090ceb');
+ rect(0,0,720,VIEW_H,'#03090ceb');
  const z=ctx.createRadialGradient(360,615,30,360,615,470);z.addColorStop(0,'#214f41');z.addColorStop(1,'#071211');rect(24,242,672,789,z,24);border(24,242,672,789,'#66877a77',24);
  small('PRIVATE CARDS',360,287,'#94b4a6','center');
  text('慢慢掀開，看看你的底牌',360,333,29,'#f3e7cf','center',650);

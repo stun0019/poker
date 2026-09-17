@@ -290,6 +290,7 @@ function bottomMain(){
  rect(271,VIEW_H-15,178,5,lobby?'#f1f3f5':'#222832',3);
 }
 function home(){
+ const extra=VIEW_H-H,cardY=354+extra*.34,dotsY=895+extra*.34,bannerY=947+extra*.69;
  avatar(62,65,66);hit('profile','Player Profile',18,17,91,91,()=>go('PROFILE'));
  text(user.name,115,48,25,'#f4f5f7','left',650,299);rect(115,75,152,23,'#191c20',12);text('GET MEMBERSHIP',187,87,10,'#9aa1ac','center',600);circle(275,87,7,'#0bb46b');
  rect(518,37,174,40,'#16181c',20);border(518,37,174,40,'#363a41',20);circle(542,57,12,'#f2b62f');text('L',542,57,14,'#60470f','center',700);text('0',672,58,18,'#f2b62f','right');
@@ -299,9 +300,9 @@ function home(){
  // ClubGG club cards form a horizontal carousel, not a vertical game-mode catalog.
  const cards=[...myClubs(),{id:'create',name:'Create Club'}],cw=424,ch=523,gap=27;
  S.clubSlide=Math.max(0,Math.min(cards.length-1,S.clubSlide));
- ctx.save();ctx.beginPath();ctx.rect(0,245,720,690);ctx.clip();
+ ctx.save();ctx.beginPath();ctx.rect(0,245,720,bannerY-269);ctx.clip();
  cards.forEach((c,i)=>{
-  const x=148+(i-S.clubSlide)*(cw+gap),y=354;if(x>720||x+cw<0)return;
+  const x=148+(i-S.clubSlide)*(cw+gap),y=cardY;if(x>720||x+cw<0)return;
   ctx.save();ctx.shadowColor='#000b';ctx.shadowBlur=25;ctx.shadowOffsetY=12;rect(x,y,cw,ch,linear(x,y,cw,ch,'#25282e','#141619'),32);ctx.restore();border(x,y,cw,ch,'#3c4047',32);
   if(c.id==='create'){
    clubArtwork({name:'CLUB',color:'#481426'},x+27,y+25,cw-54,313);text('Create a club and run your own poker club',x+cw/2,y+374,15,'#9299a2','center',400,cw-36);
@@ -315,14 +316,14 @@ function home(){
    hit('club-'+c.id,'進入 '+c.name,Math.max(0,x),y,Math.min(720,x+cw)-Math.max(0,x),ch,()=>enterClub(c.id));
   }
  });ctx.restore();
- cards.forEach((c,i)=>rect(360-(cards.length*20)/2+i*20,895,i===S.clubSlide?14:6,6,i===S.clubSlide?'#e9edf3':'#444952',3));
- hit('clubs-prev','上一個俱樂部',0,320,80,600,()=>{S.clubSlide=Math.max(0,S.clubSlide-1);invalidate()},S.clubSlide===0);
- hit('clubs-next','下一個俱樂部',640,320,80,600,()=>{S.clubSlide=Math.min(cards.length-1,S.clubSlide+1);invalidate()},S.clubSlide===cards.length-1);
+ cards.forEach((c,i)=>rect(360-(cards.length*20)/2+i*20,dotsY,i===S.clubSlide?14:6,6,i===S.clubSlide?'#e9edf3':'#444952',3));
+ hit('clubs-prev','上一個俱樂部',0,cardY-34,80,600,()=>{S.clubSlide=Math.max(0,S.clubSlide-1);invalidate()},S.clubSlide===0);
+ hit('clubs-next','下一個俱樂部',640,cardY-34,80,600,()=>{S.clubSlide=Math.min(cards.length-1,S.clubSlide+1);invalidate()},S.clubSlide===cards.length-1);
  // Membership banner stays in its reference slot; it does not introduce a new flow.
- rect(28,947,664,162,linear(28,947,664,162,'#f1f2f4','#cfd3d9'),20);border(28,947,664,162,'#ffffffb8',20);
- if(clubIcon.complete&&clubIcon.naturalWidth)ctx.drawImage(clubIcon,48,970,116,116);
- text('PLAY WITH FRIENDS',191,1007,30,'#111317','left',750,469);
- text('Club Games',191,1051,24,'#555d69','left',500);glyph('arrow',659,1028,23,'#30353d');
+ rect(28,bannerY,664,162,linear(28,bannerY,664,162,'#f1f2f4','#cfd3d9'),20);border(28,bannerY,664,162,'#ffffffb8',20);
+ if(clubIcon.complete&&clubIcon.naturalWidth)ctx.drawImage(clubIcon,48,bannerY+23,116,116);
+ text('PLAY WITH FRIENDS',191,bannerY+60,30,'#111317','left',750,469);
+ text('Club Games',191,bannerY+104,24,'#555d69','left',500);glyph('arrow',659,bannerY+81,23,'#30353d');
  bottomMain();
 }
 function joinPage(){
@@ -654,7 +655,7 @@ function scrollArea(){return S.modal?null:S.viewport||null}
 let pointer=null;
 canvas.addEventListener('pointerdown',e=>{
  if(pointer)return;const p=point(e),area=scrollArea();pointer={id:e.pointerId,start:p,last:p,drag:false,scroll:area&&p.y>=area[0]&&p.y<=area[1]};
- S.pressed=target(p)?.id||null;pointer.carousel=(S.page==='HOME'||S.page==='CLUBS')&&!S.modal&&p.y>300&&p.y<930;S.keyboard=false;canvas.setPointerCapture(e.pointerId);animate(350);
+ S.pressed=target(p)?.id||null;pointer.carousel=(S.page==='HOME'||S.page==='CLUBS')&&!S.modal&&p.y>300&&p.y<930+(VIEW_H-H)*.4;S.keyboard=false;canvas.setPointerCapture(e.pointerId);animate(350);
  if(S.pressed?.startsWith('squeeze-card-')){
   pointer.squeeze=Number(S.pressed.slice(-1));pointer.peekStart=tableSession.peek[pointer.squeeze];pointer.sounded=false;sound('peel');
  }
@@ -676,7 +677,7 @@ canvas.addEventListener('pointerup',e=>{
  if(pointer.betHold){const cancelled=pointer.betCancelled,v=tableSession?.raiseTo;pointer=null;S.pressed=null;if(!cancelled)requestHeroAction('raise',v);invalidate();return}
  if(pointer.squeeze!==undefined){settlePeel(pointer.squeeze);pointer=null;S.pressed=null;invalidate();return}
  if(pointer.carousel&&pointer.drag){const dx=point(e).x-pointer.start.x;if(Math.abs(dx)>45)S.clubSlide=Math.max(0,Math.min(myClubs().length,S.clubSlide+(dx<0?1:-1)));pointer=null;S.pressed=null;invalidate();return}
- if(S.page==='PLAY'&&!S.modal&&pointer.drag&&pointer.start.y>950&&point(e).y-pointer.start.y<-100){pointer=null;S.pressed=null;open('tableMenu');return}
+ if(S.page==='PLAY'&&!S.modal&&pointer.drag&&pointer.start.y>950+(VIEW_H-H)&&point(e).y-pointer.start.y<-100){pointer=null;S.pressed=null;open('tableMenu');return}
  const h=target(point(e)),ok=!pointer.drag&&h?.id===S.pressed;pointer=null;S.pressed=null;if(ok)activate(h);invalidate();
 });
 function settlePeel(i,force=false){
