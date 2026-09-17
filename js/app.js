@@ -287,7 +287,6 @@ function bottomMain(){
   glyph(icon==='grid'?'menu':icon,x,top+(lobby?42:35),lobby?29:25,on&&lobby?'#ef365d':c);text(label,x,top+(lobby?85:72),lobby?14:13,c,'center',500,99);
   hit('main-nav-'+i,label,i*720/7,top,720/7,height,()=>page==='HOME'?go('HOME',{},true):page==='ME'?go('ME'):page==='EVENTS_HOME'?open('info',{title:'Live Event',body:'Live Event 不在這次俱樂部 Prototype 的範圍。'}):null,!page);
  });
- rect(271,VIEW_H-15,178,5,lobby?'#f1f3f5':'#222832',3);
 }
 function home(){
  const extra=VIEW_H-H,cardY=354+extra*.34,dotsY=895+extra*.34,bannerY=947+extra*.69;
